@@ -34,8 +34,8 @@ export default function Impostazioni() {
 
         <MenuItem
           icon={<FileXls size={22} color={colors.brand} weight="fill" />}
-          label="Esporta riepilogo (Excel)"
-          onPress={() => router.push("/export")}
+          label="Statistiche / Esportazione"
+          onPress={() => router.push("/statistiche")}
           testID="menu-export"
         />
         {isAdmin ? (

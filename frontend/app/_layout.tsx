@@ -45,6 +45,7 @@ export default function RootLayout() {
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="select-giro" options={{ presentation: "modal" }} />
                       <Stack.Screen name="client/new" options={{ presentation: "modal" }} />
+                      <Stack.Screen name="client/edit/[id]" options={{ presentation: "modal" }} />
                     </Stack>
                   </ToastProvider>
                 </BottomSheetModalProvider>

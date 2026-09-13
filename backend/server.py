@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -136,6 +137,7 @@ class ClientCreate(BaseModel):
     cap: str = ""
     telefono: str = ""
     email: str = ""
+    agent: Optional[str] = None
 
 
 class ClientUpdate(BaseModel):
@@ -150,6 +152,7 @@ class ClientUpdate(BaseModel):
     telefono: Optional[str] = None
     email: Optional[str] = None
     permanent_note: Optional[str] = None
+    agent: Optional[str] = None
 
 
 class EventCreate(BaseModel):
@@ -495,10 +498,29 @@ async def da_verificare(user=Depends(get_current_user)):
     return [client_public(d) for d in docs]
 
 
+VALID_AGENTS = {"umberto", "andrea"}
+
+
+@api.get("/clients/all")
+async def list_all_clients(search: str = Query("", alias="search"), user=Depends(get_current_user)):
+    q = {"deleted_at": None}
+    if user.get("role") != "admin":
+        q["agent"] = user["username"]
+    s = (search or "").strip()
+    if s:
+        q["ragione_sociale"] = {"$regex": re.escape(s), "$options": "i"}
+    docs = await db.clients.find(q, {"_id": 0}).to_list(10000)
+    docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
+    return [client_public(d) for d in docs]
+
+
 @api.post("/clients")
 async def create_client(body: ClientCreate, user=Depends(get_current_user)):
     if not body.ragione_sociale.strip():
         raise HTTPException(status_code=400, detail="Ragione sociale obbligatoria")
+    agent = user["username"]
+    if user.get("role") == "admin" and body.agent in VALID_AGENTS:
+        agent = body.agent
     doc = {
         "id": str(uuid.uuid4()),
         "ragione_sociale": body.ragione_sociale.strip(),
@@ -512,7 +534,7 @@ async def create_client(body: ClientCreate, user=Depends(get_current_user)):
         "cap": body.cap.strip(),
         "telefono": body.telefono.strip(),
         "email": body.email.strip(),
-        "agent": user["username"],
+        "agent": agent,
         "permanent_note": "",
         "last_visit_at": None,
         "snoozed_until": None,
@@ -543,6 +565,10 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     if user.get("role") != "admin" and target.get("agent") != user["username"]:
         raise HTTPException(status_code=403, detail="Non puoi modificare questo cliente")
+    # Only admin may (re)assign the agent; validate value.
+    if "agent" in update:
+        if user.get("role") != "admin" or update["agent"] not in VALID_AGENTS:
+            update.pop("agent", None)
     await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": update})
     doc = await db.clients.find_one({"id": client_id}, {"_id": 0})
     return client_public(doc)
@@ -625,20 +651,20 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
-# Excel export: monthly summary per giro
+# Monthly statistics + Excel export (per giro)
 # ---------------------------------------------------------------------------
 MONTHS_IT = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
 
 
-@api.get("/export/monthly")
-async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user=Depends(get_current_user)):
+async def _monthly_grid(giro_id: str, year: int, user: dict):
     giro = await db.giri.find_one({"id": giro_id}, {"_id": 0})
     if not giro:
         raise HTTPException(status_code=404, detail="Giro non trovato")
 
-    clients = await db.clients.find(
-        {"giro_id": giro_id, "agent": user["username"], "deleted_at": None}, {"_id": 0}
-    ).to_list(5000)
+    q = {"giro_id": giro_id, "deleted_at": None}
+    if user.get("role") != "admin":
+        q["agent"] = user["username"]
+    clients = await db.clients.find(q, {"_id": 0}).to_list(5000)
     clients.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
     client_ids = [c["id"] for c in clients]
 
@@ -650,28 +676,53 @@ async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user
         {"_id": 0},
     ).to_list(100000)
 
-    grid = {cid: {m: set() for m in range(12)} for cid in client_ids}
+    grid = {cid: {m: {"visit": False, "orders": [], "collection": False} for m in range(12)} for cid in client_ids}
     for e in events:
         created = e["created_at"]
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
-        local = created.astimezone(ROME)
-        m = local.month - 1
-        t = e["type"]
-        if t == "visit":
-            grid[e["client_id"]][m].add("V")
-        elif t == "order":
-            grid[e["client_id"]][m].add("O")
-        elif t == "collection":
-            grid[e["client_id"]][m].add("I")
+        m = created.astimezone(ROME).month - 1
+        cell = grid[e["client_id"]][m]
+        if e["type"] == "visit":
+            cell["visit"] = True
+        elif e["type"] == "order":
+            name = e.get("company_name") or "Ordine"
+            if name not in cell["orders"]:
+                cell["orders"].append(name)
+        elif e["type"] == "collection":
+            cell["collection"] = True
+    return giro, clients, grid
 
-    def mark_text(marks: set) -> str:
+
+@api.get("/stats/monthly")
+async def stats_monthly(giro_id: str = Query(...), year: int = Query(...), user=Depends(get_current_user)):
+    giro, clients, grid = await _monthly_grid(giro_id, year, user)
+    rows = []
+    for cli in clients:
+        months = []
+        for m in range(12):
+            c = grid[cli["id"]][m]
+            months.append({"visit": c["visit"], "orders": c["orders"], "collection": c["collection"]})
+        rows.append({
+            "id": cli["id"],
+            "ragione_sociale": cli.get("ragione_sociale", ""),
+            "citta": cli.get("citta", ""),
+            "months": months,
+        })
+    return {"giro": {"id": giro["id"], "name": giro["name"]}, "year": year, "months": MONTHS_IT, "clients": rows}
+
+
+@api.get("/export/monthly")
+async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user=Depends(get_current_user)):
+    giro, clients, grid = await _monthly_grid(giro_id, year, user)
+
+    def mark_text(cell: dict) -> str:
         out = []
-        if "V" in marks:
+        if cell["visit"]:
             out.append("\u2713 visita")
-        if "O" in marks:
-            out.append("\u2713 ordine")
-        if "I" in marks:
+        if cell["orders"]:
+            out.append("\u2713 ordine: " + ", ".join(cell["orders"]))
+        if cell["collection"]:
             out.append("\u2713 incasso")
         return "\n".join(out)
 
@@ -702,12 +753,12 @@ async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user
         ws.append(row)
         r = ws.max_row
         for col in range(3, 15):
-            ws.cell(row=r, column=col).alignment = Alignment(horizontal="center", wrap_text=True)
+            ws.cell(row=r, column=col).alignment = Alignment(horizontal="center", wrap_text=True, vertical="top")
 
     ws.column_dimensions["A"].width = 34
     ws.column_dimensions["B"].width = 20
     for i in range(12):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 12
+        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 18
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -1,51 +1,62 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Check, MapTrifold, X } from "phosphor-react-native";
 
-import { apiGet, apiPost, Client, Giro } from "@/src/api";
+import { apiGet, apiPut, Client, Giro } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
-export default function NewClient() {
+export default function EditClient() {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
   const qc = useQueryClient();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
+  const clientQuery = useQuery({ queryKey: ["client", id], queryFn: () => apiGet<Client>(`/clients/${id}`) });
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
 
   const [form, setForm] = useState({
-    ragione_sociale: "",
-    provincia: "",
-    citta: "",
-    zona: "",
-    indirizzo: "",
-    cap: "",
-    telefono: "",
-    email: "",
-    position: "",
+    ragione_sociale: "", provincia: "", citta: "", zona: "",
+    indirizzo: "", cap: "", telefono: "", email: "", position: "",
   });
   const [giroId, setGiroId] = useState<string | null>(null);
   const [showGiro, setShowGiro] = useState(false);
-  const [agent, setAgent] = useState<"umberto" | "andrea">(
-    user?.role === "admin" ? "umberto" : (user?.username as "umberto" | "andrea") ?? "umberto"
-  );
+  const [agent, setAgent] = useState<"umberto" | "andrea">("umberto");
+
+  useEffect(() => {
+    const c = clientQuery.data;
+    if (!c) return;
+    setForm({
+      ragione_sociale: c.ragione_sociale ?? "",
+      provincia: c.provincia ?? "",
+      citta: c.citta ?? "",
+      zona: c.zona ?? "",
+      indirizzo: c.indirizzo ?? "",
+      cap: c.cap ?? "",
+      telefono: c.telefono ?? "",
+      email: c.email ?? "",
+      position: c.position != null && c.position !== 999 ? String(c.position) : "",
+    });
+    setGiroId(c.giro_id ?? null);
+    setAgent((c.agent as "umberto" | "andrea") ?? "umberto");
+  }, [clientQuery.data?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const create = useMutation({
+  const save = useMutation({
     mutationFn: () =>
-      apiPost<Client>("/clients", {
+      apiPut<Client>(`/clients/${id}`, {
         ragione_sociale: form.ragione_sociale.trim(),
         provincia: form.provincia.trim(),
         citta: form.citta.trim(),
@@ -55,26 +66,27 @@ export default function NewClient() {
         telefono: form.telefono.trim(),
         email: form.email.trim(),
         giro_id: giroId,
-        position: form.position ? parseInt(form.position, 10) : null,
-        agent: isAdmin ? agent : undefined,
+        position: form.position ? parseInt(form.position, 10) : 999,
+        ...(isAdmin ? { agent } : {}),
       }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client", id] });
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["da-verificare"] });
-      toast("Cliente aggiunto", "success");
+      toast("Anagrafica aggiornata", "success");
       router.back();
     },
     onError: (e: any) => toast(e?.detail || "Errore", "error"),
   });
 
-  if (giriQuery.isLoading) return <Loading />;
+  if (clientQuery.isLoading || giriQuery.isLoading) return <Loading />;
   const selectedGiro = giriQuery.data?.find((g) => g.id === giroId);
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <AppText weight="bold" style={styles.headerTitle}>Nuovo cliente</AppText>
-        <Pressable testID="new-client-close" onPress={() => router.back()} hitSlop={8} style={styles.closeBtn}>
+        <AppText weight="bold" style={styles.headerTitle}>Modifica anagrafica</AppText>
+        <Pressable testID="edit-client-close" onPress={() => router.back()} hitSlop={8} style={styles.closeBtn}>
           <X size={20} color={colors.onSurfaceSecondary} weight="bold" />
         </Pressable>
       </View>
@@ -84,7 +96,7 @@ export default function NewClient() {
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + 120 }}
         keyboardShouldPersistTaps="handled"
       >
-        <LabeledInput label="Ragione sociale *" value={form.ragione_sociale} onChange={set("ragione_sociale")} testID="f-ragione" />
+        <LabeledInput label="Ragione sociale *" value={form.ragione_sociale} onChange={set("ragione_sociale")} testID="e-ragione" />
 
         {isAdmin ? (
           <View>
@@ -93,12 +105,7 @@ export default function NewClient() {
               {(["umberto", "andrea"] as const).map((a) => {
                 const active = agent === a;
                 return (
-                  <Pressable
-                    key={a}
-                    testID={`f-agent-${a}`}
-                    onPress={() => setAgent(a)}
-                    style={[styles.agentChip, active && styles.agentChipActive]}
-                  >
+                  <Pressable key={a} testID={`e-agent-${a}`} onPress={() => setAgent(a)} style={[styles.agentChip, active && styles.agentChipActive]}>
                     <AppText weight="semibold" style={[styles.agentChipText, active && { color: colors.onBrand }]}>
                       {a === "umberto" ? "Umberto Rodomisto" : "Andrea Azzarito"}
                     </AppText>
@@ -109,10 +116,9 @@ export default function NewClient() {
           </View>
         ) : null}
 
-        {/* Giro picker */}
         <View>
           <AppText weight="medium" style={styles.label}>Giro</AppText>
-          <Pressable testID="f-giro-toggle" onPress={() => setShowGiro((s) => !s)} style={styles.pickerBtn}>
+          <Pressable testID="e-giro-toggle" onPress={() => setShowGiro((s) => !s)} style={styles.pickerBtn}>
             <MapTrifold size={18} color={colors.brand} weight="bold" />
             <AppText weight="medium" style={styles.pickerText}>
               {selectedGiro ? selectedGiro.name : "Nessun giro (Da Verificare)"}
@@ -120,11 +126,11 @@ export default function NewClient() {
           </Pressable>
           {showGiro ? (
             <View style={styles.pickerList}>
-              <Pressable testID="f-giro-none" onPress={() => { setGiroId(null); setShowGiro(false); }} style={styles.pickerItem}>
+              <Pressable testID="e-giro-none" onPress={() => { setGiroId(null); setShowGiro(false); }} style={styles.pickerItem}>
                 <AppText style={styles.pickerItemText}>Nessun giro (Da Verificare)</AppText>
               </Pressable>
               {(giriQuery.data ?? []).map((g) => (
-                <Pressable key={g.id} testID={`f-giro-${g.id}`} onPress={() => { setGiroId(g.id); setShowGiro(false); }} style={styles.pickerItem}>
+                <Pressable key={g.id} testID={`e-giro-${g.id}`} onPress={() => { setGiroId(g.id); setShowGiro(false); }} style={styles.pickerItem}>
                   <AppText style={styles.pickerItemText}>{g.name}</AppText>
                 </Pressable>
               ))}
@@ -132,24 +138,24 @@ export default function NewClient() {
           ) : null}
         </View>
 
-        <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="f-position" />
-        <LabeledInput label="Provincia" value={form.provincia} onChange={set("provincia")} testID="f-provincia" />
-        <LabeledInput label="Città" value={form.citta} onChange={set("citta")} testID="f-citta" />
-        <LabeledInput label="Zona / destinazione" value={form.zona} onChange={set("zona")} testID="f-zona" />
-        <LabeledInput label="Indirizzo" value={form.indirizzo} onChange={set("indirizzo")} testID="f-indirizzo" />
-        <LabeledInput label="CAP" value={form.cap} onChange={set("cap")} keyboardType="number-pad" testID="f-cap" />
-        <LabeledInput label="Telefono" value={form.telefono} onChange={set("telefono")} keyboardType="phone-pad" testID="f-telefono" />
-        <LabeledInput label="Email" value={form.email} onChange={set("email")} keyboardType="email-address" testID="f-email" />
+        <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="e-position" />
+        <LabeledInput label="Provincia" value={form.provincia} onChange={set("provincia")} testID="e-provincia" />
+        <LabeledInput label="Città" value={form.citta} onChange={set("citta")} testID="e-citta" />
+        <LabeledInput label="Zona / destinazione" value={form.zona} onChange={set("zona")} testID="e-zona" />
+        <LabeledInput label="Indirizzo" value={form.indirizzo} onChange={set("indirizzo")} testID="e-indirizzo" />
+        <LabeledInput label="CAP" value={form.cap} onChange={set("cap")} keyboardType="number-pad" testID="e-cap" />
+        <LabeledInput label="Telefono" value={form.telefono} onChange={set("telefono")} keyboardType="phone-pad" testID="e-telefono" />
+        <LabeledInput label="Email" value={form.email} onChange={set("email")} keyboardType="email-address" testID="e-email" />
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Button
-          title="Salva cliente"
-          testID="save-client-btn"
+          title="Salva modifiche"
+          testID="save-edit-client-btn"
           icon={<Check size={20} color={colors.onBrand} weight="bold" />}
           disabled={!form.ragione_sociale.trim()}
-          loading={create.isPending}
-          onPress={() => create.mutate()}
+          loading={save.isPending}
+          onPress={() => save.mutate()}
         />
       </View>
     </View>
@@ -158,9 +164,7 @@ export default function NewClient() {
 
 function LabeledInput({
   label, value, onChange, keyboardType, testID,
-}: {
-  label: string; value: string; onChange: (v: string) => void; keyboardType?: any; testID: string;
-}) {
+}: { label: string; value: string; onChange: (v: string) => void; keyboardType?: any; testID: string }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (

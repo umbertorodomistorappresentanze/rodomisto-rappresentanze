@@ -1,0 +1,41 @@
+{
+  "summary": "AgendaVisite iteration 2 full-stack testing PASSED. Backend: 35/35 pytest tests green (24 legacy + 11 new for /api/clients/all, admin-only agent field, /api/stats/monthly, /api/export/monthly with company names). Frontend (mobile viewport 390x844 against public preview URL): the reported bug is confirmed FIXED — on the giro reorder screen (Catanzaro→Guardavalle, 24 loc), the 'Aggiungi località' input (add-loc-input), add button (add-loc-btn), giro-name-input and save button (giro-save-btn) are permanently visible in a fixed top section above a scrollable list; a new locality was added and the giro was saved successfully. Dashboard shows anagrafica-card + statistiche-card + select-giro-card. Anagrafica search 'gramaca' correctly returns exactly 1 client (Gramaca S.r.l., Cessaniti, Umberto). Client detail opens with edit-client-btn; edit form shows admin agent chips (e-agent-umberto/e-agent-andrea), saving updates the anagrafica (city persisted, consulente reassigned to Andrea, 'Anagrafica aggiornata' toast). New-client form for admin shows both agent chips; save-client-btn creates the client. Statistiche screen renders 7 giro chips (horizontal), 3 year chips (2024/2025/2026), and download-excel-btn. Two non-blocking RN-web console warnings persist ('shadow*' style props deprecated; props.pointerEvents deprecated) — same as iteration 1, still pending. No new bugs found. Deprecated packages check: no expo-av / expo-barcode-scanner / expo-background-fetch imports detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "React Native Web console warning still present: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Same as iteration 1; migrate shadowColor/shadowOffset/shadowOpacity/shadowRadius to boxShadow. Reference: sweep /app/frontend/src/theme and any StyleSheet with shadow* keys."},
+      {"component": "styles (various)", "issue": "React Native Web console warning still present: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Migrate pointerEvents prop to style.pointerEvents."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_agendavisite.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, low priority) Migrate deprecated RN Web style props: shadow* -> boxShadow, pointerEvents prop -> style.pointerEvents. Non-blocking console warnings only.",
+    "(Optional) Add a hard DELETE (or soft-delete admin) endpoint for /api/clients/{id}; test suite currently leaves TEST_* clients behind (~15 rows) because there is no cleanup path — they are all prefixed TEST_ for easy manual purge."
+  ],
+  "critical_code_review_comments": [
+    "server.py update_client silently drops the agent field when a non-admin sends it (line 569-571). This is correct behavior, and test_non_admin_cannot_change_agent_on_own verifies it — good.",
+    "server.py list_all_clients returns clients for admin regardless of agent (no filter) which is the intended admin scope; verified.",
+    "_monthly_grid respects role — admin sees every agent's clients in the giro, agent sees only own — verified against the data (umberto=633 all, andrea=~84 own)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new — 11 tests for /clients/all, admin-only agent field, /stats/monthly, /export/monthly company-name inclusion)",
+    "/app/backend/tests/test_agendavisite.py (updated stale assertions: Lamezia->Vibo locality count and da-verificare non-empty; now match current data state)"
+  ],
+  "success_rate": {"backend": "100% (35/35)", "frontend": "100% of critical flows"},
+  "seed_data_creation": "~15 TEST_ clients left behind by pytest runs (no DELETE endpoint). All prefixed 'TEST_' — safe to purge manually or via a future admin cleanup endpoint. One TEST_LOC_* locality was added inside 'Catanzaro -> Guardavalle' during the UI bug-fix verification and then removed by an out-of-band PUT to restore the 24-locality state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Full backend regression = /app/backend/tests/ (pytest -v). All 35 tests pass against EXPO_PUBLIC_BACKEND_URL. The 'Aggiungi località' fixed-top bug fix is verified visually and functionally at /giro/[id] — do not regress the layout: fixedTop must sit outside DraggableFlatList so the list can scroll while the input+button+name stay pinned. Dashboard testIDs: anagrafica-card, statistiche-card, select-giro-card, new-client-btn (top-right +). Anagrafica: anagrafica-search, anagrafica-search-clear, anagrafica-row-<id>, anagrafica-add. Client new form (admin): f-ragione, f-agent-umberto, f-agent-andrea, f-giro-toggle, f-giro-<id>|f-giro-none, f-position, f-provincia, f-citta, f-zona, f-indirizzo, f-cap, f-telefono, f-email, save-client-btn. Client edit form: mirror with e-* prefix + save-edit-client-btn. Statistiche: stats-giro-<id>, stats-year-<y>, stats-row-<id>, download-excel-btn. Giro edit: giro-name-input, add-loc-input, add-loc-btn, drag-<i>, remove-loc-<i>, giro-save-btn. Legacy: select-giro-card->giro-option-<id>->client-actions-<id>, action-visitato/ordine/incassato/rimandata/nota, order-company-<id>, reschedule-3/7/15/30/custom, note-input, save-note. Custom-date reschedule is disabled on web (expected per problem statement).",
+  "rca_of_issue": "The reported bug (Aggiungi località hidden when giri have many localities, e.g. 24) is FIXED. RCA: previously the input + add button sat inside the same scrollable list container so it scrolled off-screen. Fix (verified in /app/frontend/app/giro/[id].tsx lines 101-131): the name field, add-locality row, and section title live in a fixed top block outside DraggableFlatList; only the localities list scrolls. Verified end-to-end on 'Catanzaro -> Guardavalle' (24 loc): the button remained visible before/after scrolling the list to the bottom, adding a new locality worked, save persisted. No further mitigation needed."
+}

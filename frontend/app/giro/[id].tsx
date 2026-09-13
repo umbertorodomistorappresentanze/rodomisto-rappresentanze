@@ -98,46 +98,46 @@ export default function GiroReorder() {
         </Pressable>
       </View>
 
+      {/* Fixed section: name + always-visible "Aggiungi località" */}
+      <View style={styles.fixedTop}>
+        <View>
+          <AppText weight="medium" style={styles.label}>Nome giro</AppText>
+          <TextInput
+            testID="giro-name-input"
+            value={name}
+            onChangeText={setName}
+            style={styles.input}
+            placeholderTextColor={colors.muted}
+          />
+        </View>
+        <View style={styles.addRow}>
+          <TextInput
+            testID="add-loc-input"
+            value={newLoc}
+            onChangeText={setNewLoc}
+            placeholder="Aggiungi località…"
+            placeholderTextColor={colors.muted}
+            style={[styles.input, { flex: 1 }]}
+            onSubmitEditing={addLocality}
+            returnKeyType="done"
+          />
+          <Pressable testID="add-loc-btn" onPress={addLocality} style={styles.addBtn}>
+            <Plus size={22} color={colors.onBrand} weight="bold" />
+          </Pressable>
+        </View>
+        <AppText weight="medium" style={styles.label}>
+          Ordine delle località · trascina per riordinare
+        </AppText>
+      </View>
+
       <DraggableFlatList
         data={localities}
         onDragEnd={({ data }) => setLocalities(data)}
         keyExtractor={(item, index) => `${item}-${index}`}
         renderItem={renderItem}
         activationDistance={Platform.OS === "web" ? 1 : 12}
+        style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.sm, paddingBottom: insets.bottom + spacing.xl }}
-        ListHeaderComponent={
-          <View style={{ gap: spacing.md, marginBottom: spacing.md }}>
-            <View>
-              <AppText weight="medium" style={styles.label}>Nome giro</AppText>
-              <TextInput
-                testID="giro-name-input"
-                value={name}
-                onChangeText={setName}
-                style={styles.input}
-                placeholderTextColor={colors.muted}
-              />
-            </View>
-            <AppText weight="medium" style={styles.label}>
-              Ordine delle località · trascina per riordinare
-            </AppText>
-          </View>
-        }
-        ListFooterComponent={
-          <View style={styles.addRow}>
-            <TextInput
-              testID="add-loc-input"
-              value={newLoc}
-              onChangeText={setNewLoc}
-              placeholder="Aggiungi località…"
-              placeholderTextColor={colors.muted}
-              style={[styles.input, { flex: 1 }]}
-              onSubmitEditing={addLocality}
-            />
-            <Pressable testID="add-loc-btn" onPress={addLocality} style={styles.addBtn}>
-              <Plus size={22} color={colors.onBrand} weight="bold" />
-            </Pressable>
-          </View>
-        }
       />
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -149,6 +149,10 @@ export default function GiroReorder() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surfaceSecondary },
+  fixedTop: {
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md,
+    paddingBottom: spacing.md, gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: c.border,
+  },
   header: {
     flexDirection: "row", alignItems: "center", gap: spacing.md,
     paddingHorizontal: spacing.lg, paddingBottom: spacing.md,

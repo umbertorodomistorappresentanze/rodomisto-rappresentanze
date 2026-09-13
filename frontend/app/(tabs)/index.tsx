@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { CaretRight, MapTrifold, Plus, SunHorizon } from "phosphor-react-native";
+import { CaretRight, ChartBar, MapTrifold, Plus, SunHorizon, Users } from "phosphor-react-native";
 import { useCallback } from "react";
 
 import { apiGet, Client, Company, Giro } from "@/src/api";
@@ -82,6 +82,24 @@ export default function Dashboard() {
           </Pressable>
         </View>
 
+        <View style={styles.quickRow}>
+          <Pressable testID="anagrafica-card" onPress={() => router.push("/anagrafica")} style={styles.quickCard}>
+            <View style={styles.quickIcon}>
+              <Users size={22} color={colors.brand} weight="fill" />
+            </View>
+            <AppText weight="semibold" style={styles.quickTitle}>Anagrafica</AppText>
+            <AppText style={styles.quickSub}>Clienti</AppText>
+          </Pressable>
+          <Pressable testID="statistiche-card" onPress={() => router.push("/statistiche")} style={styles.quickCard}>
+            <View style={styles.quickIcon}>
+              <ChartBar size={22} color={colors.brand} weight="fill" />
+            </View>
+            <AppText weight="semibold" style={styles.quickTitle}>Statistiche</AppText>
+            <AppText style={styles.quickSub}>Esportazione</AppText>
+          </Pressable>
+        </View>
+
+        <AppText weight="bold" style={styles.blockLabel}>GIRO VISITE CLIENTI</AppText>
         <Pressable testID="select-giro-card" onPress={() => router.push("/select-giro")} style={styles.giroCard}>
           <View style={styles.giroIcon}>
             <MapTrifold size={26} color={colors.onBrand} weight="fill" />
@@ -162,6 +180,23 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.md,
   },
   headerTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  quickRow: { flexDirection: "row", gap: spacing.md },
+  quickCard: {
+    flex: 1,
+    backgroundColor: c.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: 2,
+  },
+  quickIcon: {
+    width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.brandSecondary,
+    alignItems: "center", justifyContent: "center", marginBottom: spacing.xs,
+  },
+  quickTitle: { fontSize: 15, color: c.onSurface },
+  quickSub: { fontSize: 12, color: c.muted },
+  blockLabel: { fontSize: 12, color: c.onSurfaceTertiary, letterSpacing: 0.5, marginTop: spacing.xs },
   dateRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   date: { fontSize: 13, color: c.muted },
   hello: { fontSize: 22, color: c.onSurface, marginTop: 2 },

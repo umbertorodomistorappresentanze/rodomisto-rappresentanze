@@ -13,6 +13,7 @@ import {
   MapPin,
   MapTrifold,
   NotePencil,
+  PencilSimple,
   Phone,
   Storefront,
 } from "phosphor-react-native";
@@ -90,6 +91,9 @@ export default function ClientDetail() {
           <CaretLeft size={22} color={colors.onSurface} weight="bold" />
         </Pressable>
         <AppText weight="bold" style={styles.headerTitle} numberOfLines={1}>{client.ragione_sociale}</AppText>
+        <Pressable testID="edit-client-btn" onPress={() => router.push(`/client/edit/${client.id}`)} hitSlop={8} style={styles.editBtn}>
+          <PencilSimple size={18} color={colors.onBrand} weight="bold" />
+        </Pressable>
       </View>
 
       <KeyboardAwareScrollView
@@ -222,6 +226,7 @@ const useStyles = makeStyles((c) => ({
   },
   backBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 18, color: c.onSurface, flex: 1 },
+  editBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" },
   card: { backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, padding: spacing.lg, gap: spacing.md },
   cardTitle: { fontSize: 15, color: c.onSurface },
   field: { flexDirection: "row", alignItems: "center", gap: spacing.md },

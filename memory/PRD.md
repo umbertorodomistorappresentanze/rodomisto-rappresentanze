@@ -22,7 +22,15 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
-## Implemented (2026-09-13)
+## Implemented (2026-09-13) — iterazione 2
+- **Dashboard a due sezioni**: card "Anagrafica Clienti" e "Statistiche / Esportazione" + sezione "GIRO VISITE CLIENTI" (flusso giro invariato).
+- **Anagrafica Clienti** (`/anagrafica`): elenco di tutti i clienti (admin) o dei propri (agente), ricerca per ragione sociale, apertura scheda, modifica anagrafica completa (`/client/edit/[id]`), inserimento nuovi clienti, assegnazione/modifica agente (Umberto/Andrea, solo admin), provincia/giro/posizione.
+- **Fix bug GIRI**: "Aggiungi località +" ora in sezione fissa in alto, sempre visibile anche con molte località; lista località con scroll interno.
+- **Statistiche / Esportazione** (`/statistiche`): selezione giro + anno, anteprima a schermo del riepilogo mensile per cliente (visita / ordine con azienda / incasso), download Excel (celle ordine con nome azienda).
+- Backend: nuovi endpoint `/api/clients/all` (ricerca), `/api/stats/monthly`; campo `agent` su create/update cliente (solo admin); export mensile con nome azienda negli ordini.
+- Verificato: 35/35 test backend, fix bug confermato dal testing agent, 633 clienti attivi, giri e ordine invariati.
+
+## Implemented (2026-09-13) — iterazione 1
 - Login password per utente + ruoli admin/agent (403 su mutazioni giri/aziende per agent).
 - Dashboard: data odierna + selettore giro grande; lista clienti divisa DA VISITARE / GESTITI nell'ordine del giro; azioni rapide via bottom sheet (Visitato, Ordine, Incassato, Rimandata, Nota).
 - Storico cliente, nota permanente, assegnazione giro; sezione Da Verificare; nuovo cliente.
