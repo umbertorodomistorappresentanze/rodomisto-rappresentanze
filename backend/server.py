@@ -1,0 +1,731 @@
+import io
+import logging
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import List, Optional
+from zoneinfo import ZoneInfo
+
+import bcrypt
+import jwt
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field
+from starlette.middleware.cors import CORSMiddleware
+
+import seed_data
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / ".env")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("agendavisite")
+
+mongo_url = os.environ["MONGO_URL"]
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ["DB_NAME"]]
+
+JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_ALGO = "HS256"
+ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
+ROME = ZoneInfo("Europe/Rome")
+VISIT_THRESHOLD_DAYS = 21
+
+app = FastAPI(title="AgendaVisite API")
+api = APIRouter(prefix="/api")
+bearer = HTTPBearer(auto_error=False)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def start_of_today_utc() -> datetime:
+    local = datetime.now(ROME)
+    start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_local.astimezone(timezone.utc)
+
+
+def hash_pw(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_pw(pw: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(pw.encode("utf-8")[:72], hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def create_token(username: str) -> str:
+    now = now_utc()
+    payload = {"sub": username, "iat": now, "exp": now + timedelta(days=ACCESS_TOKEN_DAYS)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def iso(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer)):
+    unauth = HTTPException(status_code=401, detail="Credenziali non valide o scadute",
+                           headers={"WWW-Authenticate": "Bearer"})
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise unauth
+    try:
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGO],
+                             options={"require": ["sub", "exp"]})
+        username = payload["sub"]
+    except Exception:
+        raise unauth
+    user = await db.users.find_one({"username": username, "is_active": True}, {"_id": 0})
+    if not user:
+        raise unauth
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class Company(BaseModel):
+    name: str
+
+
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class GiroCreate(BaseModel):
+    name: str
+    localities: List[str] = Field(default_factory=list)
+
+
+class GiroUpdate(BaseModel):
+    name: Optional[str] = None
+    localities: Optional[List[str]] = None
+    active: Optional[bool] = None
+
+
+class ClientCreate(BaseModel):
+    ragione_sociale: str
+    provincia: str = ""
+    giro_id: Optional[str] = None
+    position: Optional[int] = None
+    citta: str = ""
+    zona: str = ""
+    indirizzo: str = ""
+    cap: str = ""
+    telefono: str = ""
+    email: str = ""
+
+
+class ClientUpdate(BaseModel):
+    ragione_sociale: Optional[str] = None
+    provincia: Optional[str] = None
+    giro_id: Optional[str] = None
+    position: Optional[int] = None
+    citta: Optional[str] = None
+    zona: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    permanent_note: Optional[str] = None
+
+
+class EventCreate(BaseModel):
+    client_id: str
+    type: str  # visit | order | reschedule | collection | note
+    company_id: Optional[str] = None
+    note_text: Optional[str] = None
+    reschedule_days: Optional[int] = None
+    reschedule_date: Optional[str] = None  # ISO date string
+
+
+# ---------------------------------------------------------------------------
+# Serializers
+# ---------------------------------------------------------------------------
+def client_public(doc: dict) -> dict:
+    return {
+        "id": doc["id"],
+        "ragione_sociale": doc.get("ragione_sociale", ""),
+        "provincia": doc.get("provincia", ""),
+        "giro_id": doc.get("giro_id"),
+        "position": doc.get("position"),
+        "citta": doc.get("citta", ""),
+        "zona": doc.get("zona", ""),
+        "indirizzo": doc.get("indirizzo", ""),
+        "cap": doc.get("cap", ""),
+        "telefono": doc.get("telefono", ""),
+        "email": doc.get("email", ""),
+        "agent": doc.get("agent", ""),
+        "permanent_note": doc.get("permanent_note", ""),
+        "last_visit_at": iso(doc.get("last_visit_at")),
+        "snoozed_until": iso(doc.get("snoozed_until")),
+        "extra": doc.get("extra", {}),
+    }
+
+
+def event_public(doc: dict) -> dict:
+    return {
+        "id": doc["id"],
+        "client_id": doc["client_id"],
+        "type": doc["type"],
+        "company_id": doc.get("company_id"),
+        "company_name": doc.get("company_name"),
+        "note_text": doc.get("note_text"),
+        "reschedule_until": iso(doc.get("reschedule_until")),
+        "agent": doc.get("agent"),
+        "created_at": iso(doc.get("created_at")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Seeding / import
+# ---------------------------------------------------------------------------
+async def seed():
+    await db.users.create_index("username", unique=True)
+    seeds = [
+        {"username": "umberto", "display_name": "Umberto Rodomisto", "role": "admin",
+         "password": os.environ["SEED_UMBERTO_PASSWORD"]},
+        {"username": "andrea", "display_name": "Andrea Azzarito", "role": "agent",
+         "password": os.environ["SEED_ANDREA_PASSWORD"]},
+    ]
+    for s in seeds:
+        existing = await db.users.find_one({"username": s["username"]})
+        if not existing:
+            await db.users.insert_one({
+                "id": str(uuid.uuid4()),
+                "username": s["username"],
+                "display_name": s["display_name"],
+                "role": s["role"],
+                "hashed_password": hash_pw(s["password"]),
+                "is_active": True,
+                "created_at": now_utc(),
+            })
+        else:
+            await db.users.update_one({"username": s["username"]}, {"$set": {"role": s["role"]}})
+
+    for i, name in enumerate(seed_data.COMPANIES):
+        existing = await db.companies.find_one({"name": name})
+        if not existing:
+            await db.companies.insert_one({
+                "id": str(uuid.uuid4()), "name": name, "active": True,
+                "order": i, "created_at": now_utc(),
+            })
+
+    giro_count = await db.giri.count_documents({})
+    if giro_count == 0:
+        for i, g in enumerate(seed_data.GIRI):
+            await db.giri.insert_one({
+                "id": str(uuid.uuid4()), "name": g["name"], "localities": g["localities"],
+                "order": i, "active": True, "created_at": now_utc(),
+            })
+
+    client_count = await db.clients.count_documents({})
+    if client_count == 0:
+        giri_docs = await db.giri.find({}, {"_id": 0}).to_list(1000)
+        loc_index = seed_data.build_locality_index(giri_docs)
+        parsed = seed_data.parse_clients()
+        docs = []
+        deleted = 0
+        for c in parsed:
+            if seed_data.should_delete(c["ragione_sociale"], c["citta"]):
+                deleted += 1
+                continue
+            giro_id, position = seed_data.resolve_assignment(
+                c["ragione_sociale"], c["zona"], giri_docs, loc_index
+            )
+            docs.append({
+                "id": str(uuid.uuid4()),
+                "ragione_sociale": c["ragione_sociale"],
+                "codice_azienda": c["codice_azienda"],
+                "provincia": c["provincia"],
+                "giro_id": giro_id,
+                "position": position if position is not None else 999,
+                "citta": c["citta"],
+                "zona": c["zona"],
+                "indirizzo": c["indirizzo"],
+                "cap": c["cap"],
+                "telefono": c["telefono"],
+                "email": c["email"],
+                "agent": c["agent"],
+                "permanent_note": "",
+                "last_visit_at": None,
+                "snoozed_until": None,
+                "extra": c["extra"],
+                "created_by": c["agent"],
+                "deleted_at": None,
+                "created_at": now_utc(),
+            })
+        # Extra clients not present in the Excel.
+        for ec in seed_data.EXTRA_CLIENTS:
+            giro_id, position = seed_data.giro_position(giri_docs, ec["giro_name"], ec["locality"])
+            docs.append({
+                "id": str(uuid.uuid4()),
+                "ragione_sociale": ec["ragione_sociale"],
+                "codice_azienda": "",
+                "provincia": ec.get("provincia", ""),
+                "giro_id": giro_id,
+                "position": position if position is not None else 999,
+                "citta": ec.get("citta", ""),
+                "zona": ec.get("zona", ""),
+                "indirizzo": ec.get("indirizzo", ""),
+                "cap": ec.get("cap", ""),
+                "telefono": ec.get("telefono", ""),
+                "email": ec.get("email", ""),
+                "agent": ec.get("agent", "umberto"),
+                "permanent_note": "",
+                "last_visit_at": None,
+                "snoozed_until": None,
+                "extra": {},
+                "created_by": ec.get("agent", "umberto"),
+                "deleted_at": None,
+                "created_at": now_utc(),
+            })
+        if docs:
+            await db.clients.insert_many(docs)
+        assigned = sum(1 for d in docs if d["giro_id"])
+        logger.info("Imported %d clients (%d assigned, %d da verificare, %d deleted, %d extra)",
+                    len(docs), assigned, len(docs) - assigned, deleted, len(seed_data.EXTRA_CLIENTS))
+
+
+@app.on_event("startup")
+async def on_startup():
+    await seed()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    client.close()
+
+
+# ---------------------------------------------------------------------------
+# Auth routes
+# ---------------------------------------------------------------------------
+@api.get("/")
+async def root():
+    return {"message": "AgendaVisite API"}
+
+
+@api.post("/auth/login")
+async def login(body: LoginRequest):
+    username = body.username.strip().lower()
+    user = await db.users.find_one({"username": username})
+    dummy = "$2b$12$" + "x" * 53
+    if not user:
+        verify_pw(body.password, dummy)
+        raise HTTPException(status_code=401, detail="Username o password errati")
+    if not user.get("is_active", False) or not verify_pw(body.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Username o password errati")
+    token = create_token(user["username"])
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"username": user["username"], "display_name": user["display_name"], "role": user.get("role", "agent")},
+    }
+
+
+@api.get("/auth/me")
+async def me(user=Depends(get_current_user)):
+    return {"username": user["username"], "display_name": user["display_name"], "role": user.get("role", "agent")}
+
+
+async def require_admin(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Solo l'amministratore può eseguire questa operazione")
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Companies
+# ---------------------------------------------------------------------------
+@api.get("/companies")
+async def list_companies(include_inactive: bool = False, user=Depends(get_current_user)):
+    q = {} if include_inactive else {"active": True}
+    docs = await db.companies.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
+    return docs
+
+
+@api.post("/companies")
+async def create_company(body: Company, user=Depends(require_admin)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nome azienda obbligatorio")
+    existing = await db.companies.find_one({"name": name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Azienda già esistente")
+    last = await db.companies.find_one({}, {"_id": 0}, sort=[("order", -1)])
+    order = (last["order"] + 1) if last else 0
+    doc = {"id": str(uuid.uuid4()), "name": name, "active": True, "order": order, "created_at": now_utc()}
+    await db.companies.insert_one(doc)
+    doc.pop("_id", None)
+    doc.pop("created_at", None)
+    return doc
+
+
+@api.put("/companies/{company_id}")
+async def update_company(company_id: str, body: CompanyUpdate, user=Depends(require_admin)):
+    update = {k: v for k, v in body.dict().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessun dato")
+    res = await db.companies.update_one({"id": company_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Azienda non trovata")
+    doc = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# Giri
+# ---------------------------------------------------------------------------
+@api.get("/giri")
+async def list_giri(include_inactive: bool = False, user=Depends(get_current_user)):
+    q = {} if include_inactive else {"active": True}
+    docs = await db.giri.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
+    return docs
+
+
+@api.post("/giri")
+async def create_giro(body: GiroCreate, user=Depends(require_admin)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nome giro obbligatorio")
+    last = await db.giri.find_one({}, {"_id": 0}, sort=[("order", -1)])
+    order = (last["order"] + 1) if last else 0
+    doc = {"id": str(uuid.uuid4()), "name": name, "localities": body.localities,
+           "order": order, "active": True, "created_at": now_utc()}
+    await db.giri.insert_one(doc)
+    doc.pop("_id", None)
+    doc.pop("created_at", None)
+    return doc
+
+
+@api.put("/giri/{giro_id}")
+async def update_giro(giro_id: str, body: GiroUpdate, user=Depends(require_admin)):
+    update = {k: v for k, v in body.dict().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessun dato")
+    res = await db.giri.update_one({"id": giro_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Giro non trovato")
+    doc = await db.giri.find_one({"id": giro_id}, {"_id": 0})
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# Clients
+# ---------------------------------------------------------------------------
+async def _handled_today_ids(client_ids: List[str]) -> set:
+    if not client_ids:
+        return set()
+    start = start_of_today_utc()
+    cursor = db.events.find(
+        {"client_id": {"$in": client_ids}, "created_at": {"$gte": start}, "deleted_at": None},
+        {"_id": 0, "client_id": 1},
+    )
+    ids = set()
+    async for e in cursor:
+        ids.add(e["client_id"])
+    return ids
+
+
+def _compute_status(doc: dict, handled_today: set) -> str:
+    now = now_utc()
+    if doc["id"] in handled_today:
+        return "gestito"
+    snoozed = doc.get("snoozed_until")
+    if snoozed is not None:
+        if snoozed.tzinfo is None:
+            snoozed = snoozed.replace(tzinfo=timezone.utc)
+        if snoozed > now:
+            return "gestito"
+    lv = doc.get("last_visit_at")
+    if lv is None:
+        return "da_visitare"
+    if lv.tzinfo is None:
+        lv = lv.replace(tzinfo=timezone.utc)
+    if lv <= now - timedelta(days=VISIT_THRESHOLD_DAYS):
+        return "da_visitare"
+    return "gestito"
+
+
+@api.get("/clients")
+async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)):
+    docs = await db.clients.find(
+        {"giro_id": giro_id, "agent": user["username"], "deleted_at": None}, {"_id": 0}
+    ).to_list(5000)
+    docs.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
+    ids = [d["id"] for d in docs]
+    handled = await _handled_today_ids(ids)
+    result = []
+    for d in docs:
+        pub = client_public(d)
+        pub["status"] = _compute_status(d, handled)
+        pub["handled_today"] = d["id"] in handled
+        result.append(pub)
+    return result
+
+
+@api.get("/clients/da-verificare")
+async def da_verificare(user=Depends(get_current_user)):
+    docs = await db.clients.find(
+        {"giro_id": None, "agent": user["username"], "deleted_at": None}, {"_id": 0}
+    ).to_list(5000)
+    docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
+    return [client_public(d) for d in docs]
+
+
+@api.post("/clients")
+async def create_client(body: ClientCreate, user=Depends(get_current_user)):
+    if not body.ragione_sociale.strip():
+        raise HTTPException(status_code=400, detail="Ragione sociale obbligatoria")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "ragione_sociale": body.ragione_sociale.strip(),
+        "codice_azienda": "",
+        "provincia": body.provincia.strip(),
+        "giro_id": body.giro_id,
+        "position": body.position if body.position is not None else 999,
+        "citta": body.citta.strip(),
+        "zona": body.zona.strip(),
+        "indirizzo": body.indirizzo.strip(),
+        "cap": body.cap.strip(),
+        "telefono": body.telefono.strip(),
+        "email": body.email.strip(),
+        "agent": user["username"],
+        "permanent_note": "",
+        "last_visit_at": None,
+        "snoozed_until": None,
+        "extra": {},
+        "created_by": user["username"],
+        "deleted_at": None,
+        "created_at": now_utc(),
+    }
+    await db.clients.insert_one(doc)
+    return client_public(doc)
+
+
+@api.get("/clients/{client_id}")
+async def get_client(client_id: str, user=Depends(get_current_user)):
+    doc = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    return client_public(doc)
+
+
+@api.put("/clients/{client_id}")
+async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_current_user)):
+    update = {k: v for k, v in body.dict(exclude_unset=True).items()}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessun dato")
+    target = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    if user.get("role") != "admin" and target.get("agent") != user["username"]:
+        raise HTTPException(status_code=403, detail="Non puoi modificare questo cliente")
+    await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": update})
+    doc = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    return client_public(doc)
+
+
+@api.get("/clients/{client_id}/history")
+async def client_history(client_id: str, user=Depends(get_current_user)):
+    docs = await db.events.find(
+        {"client_id": client_id, "deleted_at": None}, {"_id": 0}
+    ).sort("created_at", -1).to_list(5000)
+    return [event_public(d) for d in docs]
+
+
+# ---------------------------------------------------------------------------
+# Events (quick actions)
+# ---------------------------------------------------------------------------
+VALID_EVENT_TYPES = {"visit", "order", "reschedule", "collection", "note"}
+
+
+@api.post("/events")
+async def create_event(body: EventCreate, user=Depends(get_current_user)):
+    if body.type not in VALID_EVENT_TYPES:
+        raise HTTPException(status_code=400, detail="Tipo evento non valido")
+    cli = await db.clients.find_one({"id": body.client_id, "deleted_at": None}, {"_id": 0})
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    now = now_utc()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "client_id": body.client_id,
+        "type": body.type,
+        "company_id": None,
+        "company_name": None,
+        "note_text": None,
+        "reschedule_until": None,
+        "agent": user["username"],
+        "created_at": now,
+        "deleted_at": None,
+    }
+
+    if body.type == "order":
+        if not body.company_id:
+            raise HTTPException(status_code=400, detail="Seleziona un'azienda")
+        comp = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
+        if not comp:
+            raise HTTPException(status_code=404, detail="Azienda non trovata")
+        doc["company_id"] = comp["id"]
+        doc["company_name"] = comp["name"]
+
+    if body.type == "note":
+        if not (body.note_text and body.note_text.strip()):
+            raise HTTPException(status_code=400, detail="Nota vuota")
+        doc["note_text"] = body.note_text.strip()
+
+    if body.type == "reschedule":
+        target = None
+        if body.reschedule_date:
+            try:
+                target = datetime.fromisoformat(body.reschedule_date.replace("Z", "+00:00"))
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Data non valida")
+        elif body.reschedule_days:
+            target = now + timedelta(days=body.reschedule_days)
+        doc["reschedule_until"] = target
+        if target is not None:
+            await db.clients.update_one({"id": body.client_id}, {"$set": {"snoozed_until": target}})
+
+    await db.events.insert_one(doc)
+
+    if body.type == "visit":
+        await db.clients.update_one(
+            {"id": body.client_id},
+            {"$set": {"last_visit_at": now, "snoozed_until": None}},
+        )
+
+    return event_public(doc)
+
+
+# ---------------------------------------------------------------------------
+# Excel export: monthly summary per giro
+# ---------------------------------------------------------------------------
+MONTHS_IT = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
+
+
+@api.get("/export/monthly")
+async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user=Depends(get_current_user)):
+    giro = await db.giri.find_one({"id": giro_id}, {"_id": 0})
+    if not giro:
+        raise HTTPException(status_code=404, detail="Giro non trovato")
+
+    clients = await db.clients.find(
+        {"giro_id": giro_id, "agent": user["username"], "deleted_at": None}, {"_id": 0}
+    ).to_list(5000)
+    clients.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
+    client_ids = [c["id"] for c in clients]
+
+    year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    year_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    events = await db.events.find(
+        {"client_id": {"$in": client_ids}, "deleted_at": None,
+         "created_at": {"$gte": year_start, "$lt": year_end}},
+        {"_id": 0},
+    ).to_list(100000)
+
+    grid = {cid: {m: set() for m in range(12)} for cid in client_ids}
+    for e in events:
+        created = e["created_at"]
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        local = created.astimezone(ROME)
+        m = local.month - 1
+        t = e["type"]
+        if t == "visit":
+            grid[e["client_id"]][m].add("V")
+        elif t == "order":
+            grid[e["client_id"]][m].add("O")
+        elif t == "collection":
+            grid[e["client_id"]][m].add("I")
+
+    def mark_text(marks: set) -> str:
+        out = []
+        if "V" in marks:
+            out.append("\u2713 visita")
+        if "O" in marks:
+            out.append("\u2713 ordine")
+        if "I" in marks:
+            out.append("\u2713 incasso")
+        return "\n".join(out)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Riepilogo"
+
+    header_fill = PatternFill("solid", fgColor="047857")
+    header_font = Font(bold=True, color="FFFFFF")
+    title_font = Font(bold=True, size=14)
+
+    ws.cell(row=1, column=1, value=f"Giro: {giro['name']} \u2014 Anno {year}").font = title_font
+    ws.append([])
+
+    headers = ["Cliente", "Citt\u00e0"] + MONTHS_IT
+    ws.append(headers)
+    hrow = ws.max_row
+    for col in range(1, len(headers) + 1):
+        c = ws.cell(row=hrow, column=col)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    for cli in clients:
+        row = [cli.get("ragione_sociale", ""), cli.get("citta", "")]
+        for m in range(12):
+            row.append(mark_text(grid[cli["id"]][m]))
+        ws.append(row)
+        r = ws.max_row
+        for col in range(3, 15):
+            ws.cell(row=r, column=col).alignment = Alignment(horizontal="center", wrap_text=True)
+
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 20
+    for i in range(12):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 12
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe = "".join(ch for ch in giro["name"] if ch.isalnum() or ch in " -_").strip().replace(" ", "_")
+    filename = f"Riepilogo_{safe}_{year}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+app.include_router(api)
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

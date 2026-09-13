@@ -1,0 +1,42 @@
+{
+  "summary": "AgendaVisite full-stack testing: 24/24 backend pytest tests pass and all critical frontend flows (login, dashboard, giro selection, quick actions, order flow, giri manage, export, companies, logout menu) are functional against the public preview URL. Fixed one real backend bug (POST /api/companies and POST /api/giri were returning 500 due to MongoDB ObjectId leaking into response after insert_one mutated the dict) and one test bug (0 or 999 short-circuit). Only frontend observations are two RN-web deprecation warnings ('shadow*' style props and 'pointerEvents' prop) — non-blocking.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/companies, POST /api/giri", "issue": "FIXED — insert_one mutates the dict adding non-serializable ObjectId _id; now popped before returning."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "React Native Web console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Sweep the StyleSheet definitions and replace shadowColor/shadowOffset/shadowOpacity/shadowRadius with boxShadow for web."},
+      {"component": "styles (various)", "issue": "React Native Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Migrate pointerEvents prop to style.pointerEvents."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_agendavisite.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Migrate deprecated RN Web style props: shadow* → boxShadow, pointerEvents prop → style.pointerEvents to silence console warnings.",
+    "(Optional) Do the same _id pop pattern anywhere else motor's insert_one is followed by returning the same dict (audit /app/backend/server.py). Current audit is clean — only companies and giri had the issue."
+  ],
+  "critical_code_review_comments": [
+    "server.py: motor's insert_one mutates the input dict (adds ObjectId _id). Anywhere the same dict is later returned directly, remember to `doc.pop('_id', None)`.",
+    "server.py sort key `d.get('position', 999)` treats a stored None as None (not the default) and would raise TypeError comparing with ints — currently safe because seeded/created clients always store an int, but consider `(d.get('position') if isinstance(d.get('position'), int) else 999, ...)` for safety."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added `doc.pop('_id', None)` after insert_one in create_company and create_giro)",
+    "/app/backend/tests/conftest.py (session fixtures)",
+    "/app/backend/tests/test_agendavisite.py (24 test cases)"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of critical flows"},
+  "seed_data_creation": "None; used the 2 seeded users. A single TEST_COMPANY_<ts> row is created & deactivated per pytest run (still listed with include_inactive=true — cosmetically visible in Aziende screen as a 17th toggle).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite is at /app/backend/tests/test_agendavisite.py and uses EXPO_PUBLIC_BACKEND_URL (public preview URL) with credentials umberto/Umberto2026! and andrea/Andrea2026!. Use `pytest /app/backend/tests/ -v` from /app/backend. Frontend testIDs (login-username/password/submit, select-giro-card, giro-option-*, client-actions-*, action-visitato/ordine/incassato/rimandata/nota, order-company-*, reschedule-3/7/15/30/custom, note-input/save, dv-client-*, assign-giro-toggle, permanent-note-input, save-permanent-note, giro-manage-*, giro-name-input, add-loc-input/btn, giro-save-btn, menu-export/companies/logout, export-giro-*, export-year-*, download-excel-btn, company-toggle-*, add-company-btn) are all present. To reach the Da Verificare tab reliably in Playwright, click the tab-bar entry via a scoped selector such as [role=\"tab\"] rather than get_by_text (the count number '174' on the dashboard label collides).",
+  "rca_of_issue": "POST /api/companies (and POST /api/giri) returned 500. RCA: motor's `collection.insert_one(doc)` mutates the passed dict, adding a `_id: ObjectId` field. The handler then returned that same dict, which FastAPI/pydantic failed to serialize (ObjectId is not JSON serializable). Mitigation: `doc.pop('_id', None)` before returning. Applied in server.py."
+}

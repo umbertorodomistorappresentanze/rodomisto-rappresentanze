@@ -1,0 +1,162 @@
+{
+  "app_name": "AgendaVisite",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "Professional, ultra-clear utility tool that prioritizes large touch targets, fast data entry, and distraction-free layout for agents on the move.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#111827",
+    "surfaceSecondary": "#F9FAFB",
+    "onSurfaceSecondary": "#374151",
+    "surfaceTertiary": "#F3F4F6",
+    "onSurfaceTertiary": "#4B5563",
+    "surfaceInverse": "#1F2937",
+    "onSurfaceInverse": "#F9FAFB",
+    "brand": "#047857",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#10B981",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D1FAE5",
+    "onBrandSecondary": "#065F46",
+    "brandTertiary": "#A7F3D0",
+    "onBrandTertiary": "#064E3B",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#4B5563",
+    "onInfo": "#FFFFFF",
+    "border": "#E5E7EB",
+    "borderStrong": "#D1D5DB",
+    "divider": "#F3F4F6",
+    "muted": "#6B7280"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing. Avoid dense layouts. Buttons must be very tall (min 56pt) and easy to hit.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Bottom tab bar",
+      "Sticky header backgrounds",
+      "Bottom-sheet drag handle area"
+    ],
+    "dont's": [
+      "Cards in the main list",
+      "Buttons"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "haptics": {
+    "button_press": "selection",
+    "route_selected": "notification_success",
+    "bottom_sheet_open": "impact_light",
+    "quick_action_success": "notification_success",
+    "drag_start": "impact_medium",
+    "drop": "impact_light"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Secure entry for 2 users.",
+      "states": {
+        "loading": "Centered spinner",
+        "empty": "N/A",
+        "error": "Inline text below input"
+      },
+      "layout": "Hero image at the top with a vertical gradient scrim fading to surface. Large inputs with 'brandPrimary' focused states. Big, thumb-friendly 'Accedi' CTA button."
+    },
+    {
+      "name": "Dashboard",
+      "purpose": "Starting point showing today's date and the massive route selector, followed by the route's client list.",
+      "states": {
+        "loading": "Skeleton list",
+        "empty": "Illustration + 'Nessun giro selezionato. Inizia scegliendo il giro di oggi.'",
+        "error": "Retry button"
+      },
+      "layout": "Top section: Large text showing today's date, then a huge 'brandPrimary' featured card acting as the 'SELEZIONA IL GIRO DI OGGI' button. Below: SectionList for clients, divided into 'DA VISITARE' and 'GIÀ VISITATI / GESTITI'. Client cards are large (min 64pt height) with clear typography and an icon to open the bottom sheet."
+    },
+    {
+      "name": "Da Verificare",
+      "purpose": "List of clients not assigned to any route.",
+      "states": {
+        "loading": "Skeleton list",
+        "empty": "Illustration + 'Nessun cliente da verificare'",
+        "error": "Retry button"
+      },
+      "layout": "Standard list layout with 'surfaceSecondary' cards. Includes a sticky FAB at the bottom right to 'Aggiungi Cliente'."
+    },
+    {
+      "name": "Storico",
+      "purpose": "Simple timeline view of past interactions with a client.",
+      "states": {
+        "loading": "Skeleton timeline",
+        "empty": "Text: 'Nessuno storico disponibile per questo cliente.'",
+        "error": "Retry button"
+      },
+      "layout": "Vertical timeline layout. Each event (Visit, Order, Reschedule, Collection, Note) is a card with an icon in a 'brandSecondary' tinted container, timestamp, and details."
+    }
+  ],
+  "images": {
+    "login_hero": {
+      "url": "https://images.unsplash.com/photo-1532594722383-b75fb8381b55?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBmaWVsZCUyMHNhbGVzJTIwcm91dGUlMjBtYXB8ZW58MHx8fHwxNzg5MjQ0MjYwfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Professional field sales map and notes"
+    },
+    "empty_state_dashboard": {
+      "url": "https://images.unsplash.com/photo-1449247709967-d4461a6a6103?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxjbGVhbiUyMG1pbmltYWxpc3QlMjBub3RlYm9vayUyMGRlc2t8ZW58MHx8fHwxNzg5MjQ0Mjc3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Clean minimalist desk"
+    },
+    "empty_state_da_verificare": {
+      "url": "https://images.unsplash.com/photo-1621831337128-35676ca30868?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBvZmZpY2UlMjBidWlsZGluZyUyMGZhY2FkZXxlbnwwfHx8fDE3ODkyNDQyNzd8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern office building facade"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use standard React Native components prioritizing touch targets >= 44x44pt. Client list items should be even taller (e.g. 64-72pt) for comfortable one-handed use.",
+    "Ensure 'SELEZIONA IL GIRO DI OGGI' is highly prominent at the top of the Dashboard. Use a large 'brandPrimary' card.",
+    "Implement the quick actions menu using a Bottom Sheet (@gorhom/bottom-sheet). Within the sheet, lay out the big thumb-friendly actions (Visitato, Ordine, Rinvio, Incassato, Nota) prominently.",
+    "Do NOT use any blues or purples. Use the provided Emerald Green accent palette strictly as defined.",
+    "For the 'Rinvio' (Reschedule) action inside the bottom sheet, expand options inline to show chips for 3/7/15/30 days and a custom date picker trigger.",
+    "For route reordering via drag & drop, rely on 'react-native-draggable-flatlist' combined with reanimated.",
+    "Never render text directly over images without the mandatory 3-stop vertical gradient scrim to ensure WCAG readability."
+  ]
+}
