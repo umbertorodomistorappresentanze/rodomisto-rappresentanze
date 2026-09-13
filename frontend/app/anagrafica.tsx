@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FlatList, Pressable, TextInput, View } from "react-native";
+import { FlatList, Pressable, ScrollView, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -7,6 +7,7 @@ import { CaretLeft, CaretRight, MagnifyingGlass, MapPin, Plus, X } from "phospho
 import { useCallback } from "react";
 
 import { apiGet, Client } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { AppText, EmptyState, Loading } from "@/src/components/ui";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -15,17 +16,27 @@ export default function Anagrafica() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
+  const [agentFilter, setAgentFilter] = useState<"all" | "umberto" | "andrea">("all");
 
   const query = useQuery({ queryKey: ["clients", "all"], queryFn: () => apiGet<Client[]>("/clients/all") });
   useFocusEffect(useCallback(() => { query.refetch(); }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
   const data = useMemo(() => {
-    const list = query.data ?? [];
+    let list = query.data ?? [];
+    if (isAdmin && agentFilter !== "all") list = list.filter((c) => c.agent === agentFilter);
     const s = search.trim().toLowerCase();
-    if (!s) return list;
-    return list.filter((c) => c.ragione_sociale.toLowerCase().includes(s));
-  }, [query.data, search]);
+    if (s) list = list.filter((c) => c.ragione_sociale.toLowerCase().includes(s));
+    return list;
+  }, [query.data, search, agentFilter, isAdmin]);
+
+  const AGENT_FILTERS: { key: "all" | "umberto" | "andrea"; label: string }[] = [
+    { key: "all", label: "Tutti" },
+    { key: "umberto", label: "Umberto" },
+    { key: "andrea", label: "Andrea" },
+  ];
 
   return (
     <View style={styles.root}>
@@ -53,6 +64,25 @@ export default function Anagrafica() {
             </Pressable>
           ) : null}
         </View>
+        {isAdmin ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {AGENT_FILTERS.map((f) => {
+              const active = agentFilter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  testID={`anagrafica-filter-${f.key}`}
+                  onPress={() => setAgentFilter(f.key)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                >
+                  <AppText weight="semibold" style={[styles.filterChipText, active && { color: colors.onBrand }]}>
+                    {f.label}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
         <AppText style={styles.count}>{data.length} clienti</AppText>
       </View>
 
@@ -115,6 +145,13 @@ const useStyles = makeStyles((c) => ({
     borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 48,
   },
   searchInput: { flex: 1, fontFamily: "PlusJakarta-Medium", fontSize: 15, color: c.onSurface },
+  filterRow: { gap: spacing.sm, paddingRight: spacing.lg },
+  filterChip: {
+    flexShrink: 0, backgroundColor: c.surfaceTertiary, borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg, height: 36, alignItems: "center", justifyContent: "center",
+  },
+  filterChipActive: { backgroundColor: c.brand },
+  filterChipText: { fontSize: 13, color: c.onSurfaceSecondary },
   count: { fontSize: 12, color: c.muted },
   row: {
     flexDirection: "row", alignItems: "center", gap: spacing.sm,
