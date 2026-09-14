@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Linking, Pressable, TextInput, View } from "react-native";
+import { Linking, Modal, Pressable, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   CaretLeft,
   CheckCircle,
   CurrencyEur,
+  DeviceMobile,
   Envelope,
   MapPin,
   MapTrifold,
@@ -16,9 +17,12 @@ import {
   PencilSimple,
   Phone,
   Storefront,
+  Trash,
+  WhatsappLogo,
 } from "phosphor-react-native";
 
-import { apiGet, apiPut, Client, Giro, VisitEvent } from "@/src/api";
+import { apiDelete, apiGet, apiPut, Client, Giro, VisitEvent } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { shortDate, timeShort } from "@/src/format";
@@ -32,6 +36,18 @@ const EVENT_META: Record<string, { label: string; icon: any }> = {
   note: { label: "Nota", icon: NotePencil },
 };
 
+function waNumber(raw: string): string {
+  let d = (raw || "").replace(/[^0-9]/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (!d.startsWith("39") && (d.startsWith("3") || d.length <= 10)) d = "39" + d;
+  return d;
+}
+
+function isMobile(raw: string): boolean {
+  const d = (raw || "").replace(/[^0-9]/g, "").replace(/^0039/, "").replace(/^39/, "");
+  return d.startsWith("3");
+}
+
 export default function ClientDetail() {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -40,6 +56,8 @@ export default function ClientDetail() {
   const toast = useToast();
   const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const clientQuery = useQuery({ queryKey: ["client", id], queryFn: () => apiGet<Client>(`/clients/${id}`) });
   const historyQuery = useQuery({ queryKey: ["history", id], queryFn: () => apiGet<VisitEvent[]>(`/clients/${id}/history`) });
@@ -47,6 +65,7 @@ export default function ClientDetail() {
 
   const [note, setNote] = useState("");
   const [showAssign, setShowAssign] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   useEffect(() => {
     if (clientQuery.data) setNote(clientQuery.data.permanent_note ?? "");
@@ -80,9 +99,30 @@ export default function ClientDetail() {
     onError: (e: any) => toast(e?.detail || "Errore", "error"),
   });
 
+  const del = useMutation({
+    mutationFn: () => apiDelete(`/clients/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", "all"] });
+      qc.invalidateQueries({ queryKey: ["da-verificare"] });
+      setShowDelete(false);
+      toast("Cliente eliminato", "success");
+      router.back();
+    },
+    onError: (e: any) => {
+      setShowDelete(false);
+      toast(e?.detail || "Errore", "error");
+    },
+  });
+
   if (clientQuery.isLoading || !clientQuery.data) return <Loading />;
   const client = clientQuery.data;
   const giroName = giriQuery.data?.find((g) => g.id === client.giro_id)?.name;
+
+  const cell = (client.extra?.telefono_cellulare || "").trim() ||
+    (client.telefono && isMobile(client.telefono) ? client.telefono.trim() : "");
+  const fisso = (client.extra?.telefono_ufficio || "").trim() ||
+    (client.telefono && !isMobile(client.telefono) && client.telefono.trim() !== cell ? client.telefono.trim() : "");
 
   return (
     <View style={styles.root}>
@@ -100,17 +140,55 @@ export default function ClientDetail() {
         bottomOffset={20}
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
       >
+        {/* Contatti rapidi */}
+        {(cell || fisso) ? (
+          <View style={styles.card}>
+            <AppText weight="semibold" style={styles.cardTitle}>Contatti rapidi</AppText>
+            {fisso ? (
+              <View style={styles.contactRow}>
+                <View style={styles.contactInfo}>
+                  <Phone size={18} color={colors.brand} weight="bold" />
+                  <View>
+                    <AppText style={styles.fieldLabel}>Fisso</AppText>
+                    <AppText weight="medium" style={styles.fieldValue}>{fisso}</AppText>
+                  </View>
+                </View>
+                <Pressable testID="call-fisso" onPress={() => Linking.openURL(`tel:${fisso}`)} style={styles.callBtn}>
+                  <Phone size={18} color={colors.onBrand} weight="fill" />
+                  <AppText weight="semibold" style={styles.callBtnText}>Chiama</AppText>
+                </Pressable>
+              </View>
+            ) : null}
+            {cell ? (
+              <View style={styles.contactRow}>
+                <View style={styles.contactInfo}>
+                  <DeviceMobile size={18} color={colors.brand} weight="bold" />
+                  <View>
+                    <AppText style={styles.fieldLabel}>Cellulare</AppText>
+                    <AppText weight="medium" style={styles.fieldValue}>{cell}</AppText>
+                  </View>
+                </View>
+                <View style={styles.contactBtns}>
+                  <Pressable testID="call-cell" onPress={() => Linking.openURL(`tel:${cell}`)} style={styles.callBtn}>
+                    <Phone size={18} color={colors.onBrand} weight="fill" />
+                    <AppText weight="semibold" style={styles.callBtnText}>Chiama</AppText>
+                  </Pressable>
+                  <Pressable testID="whatsapp-cell" onPress={() => Linking.openURL(`https://wa.me/${waNumber(cell)}`)} style={styles.waBtn}>
+                    <WhatsappLogo size={18} color="#FFFFFF" weight="fill" />
+                    <AppText weight="semibold" style={styles.callBtnText}>WhatsApp</AppText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {/* Anagrafica */}
         <View style={styles.card}>
           <Field icon={<MapPin size={18} color={colors.brand} weight="bold" />} label="Città" value={client.citta} />
           <Field icon={<MapTrifold size={18} color={colors.brand} weight="bold" />} label="Zona / Giro" value={client.zona || "—"} />
           {client.provincia ? <Field label="Provincia" value={client.provincia} /> : null}
           {client.indirizzo ? <Field label="Indirizzo" value={`${client.indirizzo}${client.cap ? `, ${client.cap}` : ""}`} /> : null}
-          {client.telefono ? (
-            <Pressable testID="call-client" onPress={() => Linking.openURL(`tel:${client.telefono}`)}>
-              <Field icon={<Phone size={18} color={colors.brand} weight="bold" />} label="Telefono" value={client.telefono} link />
-            </Pressable>
-          ) : null}
           {client.email ? (
             <Pressable testID="email-client" onPress={() => Linking.openURL(`mailto:${client.email}`)}>
               <Field icon={<Envelope size={18} color={colors.brand} weight="bold" />} label="Email" value={client.email} link />
@@ -166,6 +244,22 @@ export default function ClientDetail() {
           <Button title="Salva nota" variant="ghost" testID="save-permanent-note" loading={saveNote.isPending} onPress={() => saveNote.mutate()} />
         </View>
 
+        {/* Azioni anagrafica */}
+        <View style={{ gap: spacing.sm }}>
+          <Button
+            title="Modifica anagrafica"
+            testID="edit-client-detail-btn"
+            icon={<PencilSimple size={18} color={colors.onBrand} weight="bold" />}
+            onPress={() => router.push(`/client/edit/${client.id}`)}
+          />
+          {isAdmin ? (
+            <Pressable testID="delete-client-btn" onPress={() => setShowDelete(true)} style={styles.deleteBtn}>
+              <Trash size={18} color={colors.error} weight="bold" />
+              <AppText weight="semibold" style={styles.deleteText}>Elimina cliente</AppText>
+            </Pressable>
+          ) : null}
+        </View>
+
         {/* Storico */}
         <View>
           <AppText weight="bold" style={styles.historyTitle}>Storico</AppText>
@@ -199,6 +293,26 @@ export default function ClientDetail() {
           )}
         </View>
       </KeyboardAwareScrollView>
+
+      <Modal visible={showDelete} transparent animationType="fade" onRequestClose={() => setShowDelete(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="delete-confirm-modal">
+            <View style={styles.modalIcon}>
+              <Trash size={26} color={colors.error} weight="fill" />
+            </View>
+            <AppText weight="bold" style={styles.modalTitle}>Eliminare il cliente?</AppText>
+            <AppText style={styles.modalText}>
+              {client.ragione_sociale} verrà rimosso dall&apos;app e dai giri. Questa azione richiede conferma.
+            </AppText>
+            <View style={styles.modalBtns}>
+              <Button title="Annulla" variant="ghost" testID="delete-cancel" onPress={() => setShowDelete(false)} style={{ flex: 1 }} />
+              <Pressable testID="delete-confirm" onPress={() => del.mutate()} style={styles.modalDeleteBtn}>
+                <AppText weight="semibold" style={styles.modalDeleteText}>{del.isPending ? "..." : "Elimina"}</AppText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -235,6 +349,31 @@ const useStyles = makeStyles((c) => ({
   fieldLabel: { fontSize: 12, color: c.muted },
   fieldValue: { fontSize: 15, color: c.onSurface, marginTop: 1 },
   giroValue: { fontSize: 16, color: c.onSurface },
+  contactRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" },
+  contactInfo: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  contactBtns: { flexDirection: "row", gap: spacing.sm },
+  callBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: c.brand,
+    borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, justifyContent: "center",
+  },
+  waBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: "#25D366",
+    borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, justifyContent: "center",
+  },
+  callBtnText: { fontSize: 14, color: "#FFFFFF" },
+  deleteBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm,
+    borderWidth: 1, borderColor: c.error, borderRadius: radius.md, minHeight: 52,
+  },
+  deleteText: { fontSize: 16, color: c.error },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
+  modalCard: { backgroundColor: c.surface, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.md, width: "100%", maxWidth: 400, alignItems: "center" },
+  modalIcon: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  modalTitle: { fontSize: 18, color: c.onSurface, textAlign: "center" },
+  modalText: { fontSize: 14, color: c.muted, textAlign: "center" },
+  modalBtns: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm, width: "100%" },
+  modalDeleteBtn: { flex: 1, backgroundColor: c.error, borderRadius: radius.md, minHeight: 56, alignItems: "center", justifyContent: "center" },
+  modalDeleteText: { fontSize: 16, color: c.onError },
   warn: { fontSize: 15, color: c.warning, fontFamily: "PlusJakarta-Medium" },
   assignRow: {
     flexDirection: "row", alignItems: "center", gap: spacing.sm,

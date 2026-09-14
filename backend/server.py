@@ -574,6 +574,16 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
     return client_public(doc)
 
 
+@api.delete("/clients/{client_id}")
+async def delete_client(client_id: str, user=Depends(require_admin)):
+    res = await db.clients.update_one(
+        {"id": client_id, "deleted_at": None}, {"$set": {"deleted_at": now_utc()}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    return {"ok": True}
+
+
 @api.get("/clients/{client_id}/history")
 async def client_history(client_id: str, user=Depends(get_current_user)):
     docs = await db.events.find(

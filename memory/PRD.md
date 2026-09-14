@@ -22,6 +22,12 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-14) — iterazione 3
+- **Scheda cliente completa**: card "Contatti rapidi" con numeri Fisso e Cellulare distinti, pulsanti **CHIAMA** (tel:) e **WHATSAPP** (wa.me, solo se presente un cellulare).
+- **Modifica anagrafica** ed **Elimina cliente** (admin) direttamente dalla scheda; eliminazione con **modale di conferma** (soft-delete, esce dai giri/anagrafica senza perdere lo storico).
+- **Cambio agente** dalla modifica scheda (admin): trasferisce il cliente ai giri dell'agente corretto senza duplicati, mantenendo giro/posizione.
+- Backend: `DELETE /api/clients/{id}` (admin, soft-delete). 47/47 test backend verdi.
+
 ## Implemented (2026-09-13) — iterazione 2
 - **Dashboard a due sezioni**: card "Anagrafica Clienti" e "Statistiche / Esportazione" + sezione "GIRO VISITE CLIENTI" (flusso giro invariato).
 - **Anagrafica Clienti** (`/anagrafica`): elenco di tutti i clienti (admin) o dei propri (agente), ricerca per ragione sociale, apertura scheda, modifica anagrafica completa (`/client/edit/[id]`), inserimento nuovi clienti, assegnazione/modifica agente (Umberto/Andrea, solo admin), provincia/giro/posizione.

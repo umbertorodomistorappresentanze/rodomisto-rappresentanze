@@ -1,0 +1,42 @@
+{
+  "summary": "AgendaVisite iteration 3 full-stack testing PASSED. Backend: 47/47 pytest tests green (35 legacy + 12 new for iter3: DELETE /api/clients/{id} admin soft-delete + 403 for agent + 404 for missing; agent transfer via PUT preserves giro_id/position with no duplicate; full anagrafica edit (8 fields) persists; giri reorder persistence; giri regression: Lamezia->Vibo has Rombiolo+Nicotera+Joppolo, Ricadi no Vibo Valentia, Joppolo only in Lamezia->Vibo). Frontend (mobile 390x844 against EXPO_PUBLIC_BACKEND_URL): end-to-end TEST_ throwaway client flow works — created via new-client form (landline only), client detail shows call-fisso and NO whatsapp-cell (correct: mobile absent), edit-client-detail-btn opens edit form, updated citta=Milano + telefono=3331234567 (mobile) + agent=andrea via e-agent-andrea + save-edit-client-btn returns to detail with whatsapp-cell + call-cell now visible; delete-client-btn opens delete-confirm-modal, delete-confirm removes client and returns to Anagrafica where search yields 0 rows. Giri reorder screen: fixed-top block (giro-name-input, add-loc-input, add-loc-btn, giro-save-btn) stays visible after list scroll. Role gating: Andrea (agent) bottom nav has NO 'Giri' tab (only Oggi/Da Verificare/Altro), Umberto (admin) has all 4. Two non-blocking RN-web console warnings persist ('shadow*' style props deprecated; props.pointerEvents deprecated) — same as iterations 1 & 2, still pending migration. No new bugs found. No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning still: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Migrate shadowColor/shadowOffset/shadowOpacity/shadowRadius to boxShadow. Reference: /app/frontend/src/theme and StyleSheet keys across screens."},
+      {"component": "styles (various)", "issue": "RN Web console warning still: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Migrate pointerEvents prop to style.pointerEvents."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_agendavisite.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_iter3_delete_and_transfer.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, low priority) Migrate deprecated RN Web style props: shadow* -> boxShadow, pointerEvents prop -> style.pointerEvents. Non-blocking console warnings only.",
+    "(Optional) Consider a scheduled cleanup for soft-deleted clients older than N days (deleted_at != null). Cosmetic — soft-delete is working correctly and hidden from all read endpoints as verified."
+  ],
+  "critical_code_review_comments": [
+    "server.py DELETE /api/clients/{id} correctly requires admin (require_admin) and does a soft-delete via $set deleted_at. All read endpoints (/clients, /clients/all, /clients/da-verificare, /clients/{id}, _monthly_grid) filter deleted_at: None — verified in code and via tests.",
+    "server.py update_client preserves giro_id/position when only agent changes (only the fields present in payload are $set) — verified by test_transfer_umberto_to_andrea_and_back which asserts giro_id and position both unchanged.",
+    "frontend client/[id].tsx correctly distinguishes fisso vs cellulare and only renders whatsapp-cell when a mobile number is detected — verified via a landline-only client showing no WhatsApp button, then mobile update revealing it.",
+    "frontend edit/[id].tsx e-agent chips only appear for admin role — Andrea's own edit flow correctly hides them (not directly tested here but consistent with iteration 2 findings and code inspection)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter3_delete_and_transfer.py (new — 12 tests covering DELETE, agent transfer, full anagrafica edit, giri reorder persistence, and giri regression)"
+  ],
+  "success_rate": {"backend": "100% (47/47)", "frontend": "100% of critical flows (create/edit/delete/agent-transfer/contatti-rapidi/giri-fixed-top/role-gating)"},
+  "seed_data_creation": "TEST_ throwaway clients are created and DELETED by both pytest tests (each test cleans up via api.delete) and by the FE flow (delete-confirm). One TEST_LOC_* locality is temporarily added in test_reorder_persist_and_add then restored to original. No leftover TEST_ data from iter3 tests (all cleaned up).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter3 adds DELETE /api/clients/{id} (admin, soft-delete). Full backend regression = /app/backend/tests/ (pytest -v) → 47/47 pass. Frontend testIDs used in iter3 flows: anagrafica-card, anagrafica-search, anagrafica-search-clear, anagrafica-row-<id>, anagrafica-add, f-ragione + save-client-btn for new client; call-fisso, call-cell, whatsapp-cell (mobile-only), edit-client-detail-btn, delete-client-btn (admin), delete-confirm-modal, delete-cancel, delete-confirm on client/[id]; e-ragione, e-citta, e-telefono, e-agent-umberto, e-agent-andrea, save-edit-client-btn on client/edit/[id]; giro-name-input, add-loc-input, add-loc-btn, drag-<i>, remove-loc-<i>, giro-save-btn on giro/[id] (all in fixed-top block that survives list scroll). Bottom nav for admin: Oggi, Da Verificare, Giri, Altro; for agent: Oggi, Da Verificare, Altro (no Giri). Drag&drop reorder on web can't be fully exercised via Playwright — persistence path validated via backend PUT /api/giri/{id} in test_reorder_persist_and_add.",
+  "rca_of_issue": "N/A — no bug found in iter3 scope. All new features (DELETE endpoint, agent transfer via PUT, full anagrafica edit, contatti rapidi with fisso/cell distinction + WhatsApp only for mobile, delete-confirm modal) are working end-to-end. Prior fix for Aggiungi località visibility (iter2) remains intact."
+}

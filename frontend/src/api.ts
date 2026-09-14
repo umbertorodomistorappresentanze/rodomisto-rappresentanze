@@ -57,6 +57,15 @@ export async function apiPut<T = any>(path: string, body?: any): Promise<T> {
   return res.json();
 }
 
+export async function apiDelete<T = any>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  await handle(res);
+  return res.json();
+}
+
 export function exportUrl(path: string): string {
   return `${BASE}/api${path}`;
 }
