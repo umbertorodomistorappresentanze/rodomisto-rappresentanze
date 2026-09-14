@@ -22,6 +22,11 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-14) — iterazione 4
+- **Gestione manuale ordine località** in ogni giro: elenco numerato nell'ordine attuale, riordino con **drag & drop** e in più con **frecce su/giù** (affidabile su ogni dispositivo), salvataggio esplicito che persiste e viene usato dalla Dashboard.
+- **Aggiungi località con scelta posizione**: campo "Pos." accanto al nome (vuoto = in fondo, oppure numero della posizione desiderata); nessun posizionamento automatico. "AGGIUNGI LOCALITÀ +" sempre visibile (fisso in alto) anche con molte località.
+- Nessuna modifica automatica dei percorsi: ordine, suddivisione giri e località restano invariati salvo modifica manuale.
+
 ## Implemented (2026-09-14) — iterazione 3
 - **Scheda cliente completa**: card "Contatti rapidi" con numeri Fisso e Cellulare distinti, pulsanti **CHIAMA** (tel:) e **WHATSAPP** (wa.me, solo se presente un cellulare).
 - **Modifica anagrafica** ed **Elimina cliente** (admin) direttamente dalla scheda; eliminazione con **modale di conferma** (soft-delete, esce dai giri/anagrafica senza perdere lo storico).

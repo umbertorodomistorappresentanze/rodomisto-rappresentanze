@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { CaretLeft, Check, DotsSixVertical, Plus, Trash } from "phosphor-react-native";
+import { ArrowDown, ArrowUp, CaretLeft, Check, DotsSixVertical, Plus, Trash } from "phosphor-react-native";
 
 import { apiGet, apiPut, Giro } from "@/src/api";
 import { AppText, Button, Loading } from "@/src/components/ui";
@@ -27,6 +27,7 @@ export default function GiroReorder() {
   const [name, setName] = useState("");
   const [localities, setLocalities] = useState<string[]>([]);
   const [newLoc, setNewLoc] = useState("");
+  const [newPos, setNewPos] = useState("");
 
   useEffect(() => {
     if (giro) {
@@ -50,8 +51,29 @@ export default function GiroReorder() {
   function addLocality() {
     const v = newLoc.trim();
     if (!v) return;
-    setLocalities((l) => [...l, v]);
+    setLocalities((l) => {
+      const n = l.length;
+      let idx = n; // default: in fondo
+      if (newPos.trim()) {
+        const p = parseInt(newPos, 10);
+        if (!isNaN(p)) idx = Math.max(0, Math.min(n, p - 1));
+      }
+      const copy = [...l];
+      copy.splice(idx, 0, v);
+      return copy;
+    });
     setNewLoc("");
+    setNewPos("");
+  }
+
+  function move(index: number, dir: -1 | 1) {
+    setLocalities((l) => {
+      const j = index + dir;
+      if (j < 0 || j >= l.length) return l;
+      const copy = [...l];
+      [copy[index], copy[j]] = [copy[j], copy[index]];
+      return copy;
+    });
   }
 
   function removeLocality(index: number) {
@@ -78,6 +100,12 @@ export default function GiroReorder() {
             <AppText weight="bold" style={styles.posText}>{index + 1}</AppText>
           </View>
           <AppText weight="medium" style={styles.locName} numberOfLines={1}>{item}</AppText>
+          <Pressable testID={`move-up-${index}`} onPress={() => move(index, -1)} disabled={index === 0} hitSlop={6} style={[styles.arrowBtn, index === 0 && styles.arrowDisabled]}>
+            <ArrowUp size={16} color={colors.onSurfaceSecondary} weight="bold" />
+          </Pressable>
+          <Pressable testID={`move-down-${index}`} onPress={() => move(index, 1)} disabled={index === localities.length - 1} hitSlop={6} style={[styles.arrowBtn, index === localities.length - 1 && styles.arrowDisabled]}>
+            <ArrowDown size={16} color={colors.onSurfaceSecondary} weight="bold" />
+          </Pressable>
           <Pressable testID={`remove-loc-${index}`} onPress={() => removeLocality(index)} hitSlop={8} style={styles.removeBtn}>
             <Trash size={18} color={colors.error} weight="bold" />
           </Pressable>
@@ -121,12 +149,24 @@ export default function GiroReorder() {
             onSubmitEditing={addLocality}
             returnKeyType="done"
           />
+          <TextInput
+            testID="add-loc-pos"
+            value={newPos}
+            onChangeText={setNewPos}
+            placeholder="Pos."
+            placeholderTextColor={colors.muted}
+            keyboardType="number-pad"
+            style={[styles.input, styles.posInput]}
+          />
           <Pressable testID="add-loc-btn" onPress={addLocality} style={styles.addBtn}>
             <Plus size={22} color={colors.onBrand} weight="bold" />
           </Pressable>
         </View>
+        <AppText style={styles.hint}>
+          Lascia &quot;Pos.&quot; vuoto per aggiungere in fondo, oppure indica il numero della posizione desiderata.
+        </AppText>
         <AppText weight="medium" style={styles.label}>
-          Ordine delle località · trascina per riordinare
+          Ordine delle località · trascina o usa le frecce per riordinare
         </AppText>
       </View>
 
@@ -177,8 +217,12 @@ const useStyles = makeStyles((c) => ({
   posBadge: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: c.brandSecondary, alignItems: "center", justifyContent: "center" },
   posText: { fontSize: 12, color: c.onBrandSecondary },
   locName: { fontSize: 15, color: c.onSurface, flex: 1 },
+  arrowBtn: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  arrowDisabled: { opacity: 0.35 },
   removeBtn: { padding: spacing.xs },
   addRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
+  posInput: { width: 64, textAlign: "center", paddingHorizontal: spacing.xs },
+  hint: { fontSize: 12, color: c.muted },
   addBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" },
   footer: { padding: spacing.lg, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border },
 }));
