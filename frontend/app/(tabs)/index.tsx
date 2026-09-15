@@ -134,6 +134,21 @@ export default function Dashboard() {
           refreshControl={
             <RefreshControl refreshing={clientsQuery.isFetching} onRefresh={() => clientsQuery.refetch()} tintColor={colors.brand} />
           }
+          ListHeaderComponent={
+            (clientsQuery.data?.length ?? 0) > 0 ? (
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryItem}>
+                  <AppText weight="bold" style={styles.summaryNumber}>{sections[0].count}</AppText>
+                  <AppText weight="medium" style={styles.summaryLabel}>Da visitare</AppText>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                  <AppText weight="bold" style={[styles.summaryNumber, { color: colors.muted }]}>{sections[1].count}</AppText>
+                  <AppText weight="medium" style={styles.summaryLabel}>Già gestiti</AppText>
+                </View>
+              </View>
+            ) : null
+          }
           renderSectionHeader={({ section }) => (
             <View style={styles.sectionHeader}>
               <AppText weight="bold" style={styles.sectionTitle}>{section.title}</AppText>
@@ -247,4 +262,18 @@ const useStyles = makeStyles((c) => ({
   },
   countText: { fontSize: 11, color: c.onBrandSecondary },
   emptySection: { fontSize: 13, color: c.muted, paddingVertical: spacing.sm, fontStyle: "italic" },
+  summaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  summaryItem: { flex: 1, alignItems: "center", gap: 2 },
+  summaryNumber: { fontSize: 26, color: c.brand },
+  summaryLabel: { fontSize: 12, color: c.muted },
+  summaryDivider: { width: 1, alignSelf: "stretch", backgroundColor: c.border, marginVertical: spacing.xs },
 }));
