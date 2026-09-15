@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -13,12 +14,11 @@ import { fonts, radius, spacing, useTheme } from "@/src/theme";
 const HERO =
   "https://images.unsplash.com/photo-1532594722383-b75fb8381b55?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBmaWVsZCUyMHNhbGVzJTIwcm91dGUlMjBtYXB8ZW58MHx8fHwxNzg5MjQ0MjYwfDA&ixlib=rb-4.1.0&q=85";
 
-const LOGO = require("../assets/images/logo.webp");
-
 export default function LoginScreen() {
   const { login } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useStyles();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -53,10 +53,12 @@ export default function LoginScreen() {
             colors={["rgba(4,120,87,0.15)", "rgba(255,255,255,0.4)", "#FFFFFF"]}
             style={StyleSheet.absoluteFill}
           />
+          <View style={[styles.brandBadge, { top: insets.top + spacing.lg }]}>
+            <AppText weight="bold" style={styles.brandText}>Agenda Visite</AppText>
+          </View>
         </View>
 
         <View style={styles.form}>
-          <Image source={LOGO} style={styles.logo} contentFit="contain" />
           <AppText weight="bold" style={styles.title}>Bentornato</AppText>
           <AppText style={styles.sub}>Accedi per iniziare il tuo giro</AppText>
 
@@ -113,9 +115,10 @@ function useThemedStyles() {
   const { colors } = useTheme();
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.surface },
-    heroWrap: { height: 220, width: "100%" },
+    heroWrap: { height: 300, width: "100%" },
     hero: { width: "100%", height: "100%" },
-    logo: { width: "100%", height: 170, marginTop: -spacing.sm, marginBottom: -spacing.md },
+    brandBadge: { position: "absolute", left: spacing.lg },
+    brandText: { fontSize: 20, color: colors.brand, fontFamily: fonts.bold },
     form: { paddingHorizontal: spacing.lg, marginTop: -spacing.xl, gap: spacing.md },
     title: { fontSize: 28, color: colors.onSurface, fontFamily: fonts.bold },
     sub: { fontSize: 15, color: colors.muted, marginBottom: spacing.sm },

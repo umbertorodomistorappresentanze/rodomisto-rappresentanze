@@ -25,7 +25,7 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 ## Implemented (2026-09-15) — iterazione 5
 - **Fix visualizzazione lista località nei Giri su iOS**: `DraggableFlatList` ora usa `containerStyle={{flex:1}}` invece di `style`, così l'elenco delle località si mostra correttamente anche su iPhone (Expo Go), non solo su web.
 - **Cambio password utenti**: umberto → `Umberto2774!`, andrea → `Andrea1606!`. Seed reso idempotente: reimposta l'hash solo se la password configurata in `.env` non verifica più (pattern da playbook auth). Ruoli/permessi/dati invariati.
-- **Logo aziendale nella login**: rimosso il badge testuale "Agenda Visite", inserito il logo "Umberto Rodomisto Rappresentanze" (`assets/images/logo.webp`) sopra i campi Login/Password, proporzionato ed elegante. Nessun'altra modifica al layout/funzionamento.
+- **Logo aziendale nella login**: rimosso il badge testuale "Agenda Visite", inserito il logo "Umberto Rodomisto Rappresentanze" (`assets/images/logo.webp`) sopra i campi Login/Password, proporzionato ed elegante. Nessun'altra modifica al layout/funzionamento. **[ANNULLATO il 2026-09-15 su richiesta utente: logo rimosso, schermata login ripristinata alla versione originale con badge "Agenda Visite". Le password NON sono state toccate dal rollback.]**
 
 
 - **Gestione manuale ordine località** in ogni giro: elenco numerato nell'ordine attuale, riordino con **drag & drop** e in più con **frecce su/giù** (affidabile su ogni dispositivo), salvataggio esplicito che persiste e viene usato dalla Dashboard.
