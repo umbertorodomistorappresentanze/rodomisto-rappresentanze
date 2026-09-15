@@ -176,7 +176,7 @@ export default function GiroReorder() {
         keyExtractor={(item, index) => `${item}-${index}`}
         renderItem={renderItem}
         activationDistance={Platform.OS === "web" ? 1 : 12}
-        style={{ flex: 1 }}
+        containerStyle={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.sm, paddingBottom: insets.bottom + spacing.xl }}
       />
 
