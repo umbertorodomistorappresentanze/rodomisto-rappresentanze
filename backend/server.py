@@ -226,7 +226,10 @@ async def seed():
                 "created_at": now_utc(),
             })
         else:
-            await db.users.update_one({"username": s["username"]}, {"$set": {"role": s["role"]}})
+            updates = {"role": s["role"]}
+            if not verify_pw(s["password"], existing.get("hashed_password", "")):
+                updates["hashed_password"] = hash_pw(s["password"])
+            await db.users.update_one({"username": s["username"]}, {"$set": updates})
 
     for i, name in enumerate(seed_data.COMPANIES):
         existing = await db.companies.find_one({"name": name})
