@@ -27,12 +27,12 @@ def _login(api, username, password):
 
 @pytest.fixture(scope="session")
 def umberto_token(api):
-    return _login(api, "umberto", "Umberto2026!")
+    return _login(api, "umberto", "Umberto2774!")
 
 
 @pytest.fixture(scope="session")
 def andrea_token(api):
-    return _login(api, "andrea", "Andrea2026!")
+    return _login(api, "andrea", "Andrea1606!")
 
 
 @pytest.fixture

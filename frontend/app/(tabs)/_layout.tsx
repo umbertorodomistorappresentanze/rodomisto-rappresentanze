@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { Tabs } from "expo-router";
-import { GearSix, House, MapTrifold, SealQuestion } from "phosphor-react-native";
+import { GearSix, Gift, House, MapTrifold, SealQuestion } from "phosphor-react-native";
 
 import { fonts, useTheme } from "@/src/theme";
 import { useAuth } from "@/src/auth";
@@ -35,6 +35,10 @@ export default function TabsLayout() {
             <Label>Giri</Label>
           </NativeTabs.Trigger>
         ) : null}
+        <NativeTabs.Trigger name="ricorrenze">
+          <Icon sf="gift" />
+          <Label>Ricorrenze</Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="impostazioni">
           <Icon sf="gearshape" />
           <Label>Altro</Label>
@@ -78,6 +82,13 @@ export default function TabsLayout() {
           title: "Giri",
           href: isAdmin ? undefined : null,
           tabBarIcon: ({ color }) => <MapTrifold size={24} color={color} weight="fill" />,
+        }}
+      />
+      <Tabs.Screen
+        name="ricorrenze"
+        options={{
+          title: "Ricorrenze",
+          tabBarIcon: ({ color }) => <Gift size={24} color={color} weight="fill" />,
         }}
       />
       <Tabs.Screen

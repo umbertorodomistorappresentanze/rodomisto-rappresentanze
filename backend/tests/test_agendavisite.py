@@ -11,7 +11,7 @@ BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL",
 class TestAuth:
     def test_login_umberto(self, api):
         r = api.post(f"{BASE_URL}/api/auth/login",
-                     json={"username": "umberto", "password": "Umberto2026!"})
+                     json={"username": "umberto", "password": "Umberto2774!"})
         assert r.status_code == 200
         j = r.json()
         assert "access_token" in j
@@ -20,7 +20,7 @@ class TestAuth:
 
     def test_login_andrea(self, api):
         r = api.post(f"{BASE_URL}/api/auth/login",
-                     json={"username": "andrea", "password": "Andrea2026!"})
+                     json={"username": "andrea", "password": "Andrea1606!"})
         assert r.status_code == 200
         assert r.json()["user"]["username"] == "andrea"
 

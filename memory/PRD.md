@@ -22,6 +22,18 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-19) — iterazione 6 (RICORRENZE + WEB)
+- **Versione WEB**: la stessa app Expo è accessibile da browser desktop (React Native Web) sullo stesso backend/DB → dati sincronizzati in tempo reale tra telefono e web. Nessun DB separato.
+- **Nuova sezione RICORRENZE** (tab dedicata, sia admin sia agente), completamente separata dai giri territoriali:
+  - Aziende: **Mazzetti d'Altavilla** (solo Natale) e **Bonfissuto** (Pasqua + Natale). Struttura flessibile per aggiungere aziende/periodi futuri (collezioni `recurrence_defs`, `recurrence_members`).
+  - Import dai due Excel: match con anagrafica esistente per ragione sociale + città (44/51 Mazzetti, 16/17 Bonfissuto collegati SENZA duplicare e SENZA toccare giro/posizione). Non abbinati (8) creati come clienti **solo ricorrenza** (giro_id=None, extra.recurrence_only), i 4 dubbi con extra.needs_review.
+  - Gruppi geografici presi dai fogli Excel; il foglio "Catanzaro e limitrofi" (elenco completo in Bonfissuto) processato per ultimo così i clienti finiscono nel gruppo geografico specifico.
+  - **Nessuna logica 21 giorni**: unico comando **ORDINE EFFETTUATO** (event type `recurrence_order` con company+period). Reversibile (undo). Azzeramento automatico per anno solare (ricorrenza annuale). Stato per (azienda, periodo) indipendente.
+  - Filtri "Da gestire" / "Effettuati" per gruppo; aggiunta manuale cliente (esistente via ricerca o nuovo) con scelta gruppo e agente (admin); membership senza duplicati.
+  - Permessi: agente vede/gestisce solo i propri clienti (403 sugli altri).
+  - Backend endpoints: GET /api/recurrences, GET /api/recurrences/{company}/members?period=, POST .../order, POST .../order/undo, POST .../members, DELETE .../members/{id}.
+  - Verificato: 62/62 test backend, flussi frontend, indipendenza aziende/periodi, giri territoriali e anagrafica invariati.
+
 ## Implemented (2026-09-15) — iterazione 5
 - **Fix visualizzazione lista località nei Giri su iOS**: `DraggableFlatList` ora usa `containerStyle={{flex:1}}` invece di `style`, così l'elenco delle località si mostra correttamente anche su iPhone (Expo Go), non solo su web.
 - **Cambio password utenti**: umberto → `Umberto2774!`, andrea → `Andrea1606!`. Seed reso idempotente: reimposta l'hash solo se la password configurata in `.env` non verifica più (pattern da playbook auth). Ruoli/permessi/dati invariati.

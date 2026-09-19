@@ -1,0 +1,42 @@
+{
+  "summary": "AgendaVisite iteration 4 — RICORRENZE feature (Mazzetti + Bonfissuto) full-stack testing PASSED. Backend: created /app/backend/tests/test_recurrences.py with 15 pytest cases (defs, members structure/counts, order/undo, cross-company & cross-period independence, add existing client without duplication, add new recurrence-only client with giro_id=None, andrea permissions incl. 403 on umberto clients, integrity of giri and client.giro_id/position after order). Total backend suite = 62/62 green (fixed pre-existing password drift Umberto2026!/Andrea2026! -> Umberto2774!/Andrea1606! in conftest.py and test_agendavisite.py). Verified counts: mazzetti/natale = 51 members, bonfissuto/pasqua = bonfissuto/natale = 17 members with exact groups {Catanzaro e limitrofi:6, verso Soverato:1, verso Crotone:4, verso Vibo Valentia:3, verso Lamezia Terme:3}. Independence verified: an order on bonfissuto/natale for a client that also exists in mazzetti/natale and bonfissuto/pasqua does NOT flip status on the other lists. Frontend (mobile 390x844 against EXPO_PUBLIC_BACKEND_URL): Ricorrenze tab visible for both umberto (admin) and andrea (agent); listing shows 2 companies with correct period labels; Bonfissuto detail renders period chips (Pasqua/Natale), filter chips (Da gestire N / Effettuati N), section headers per gruppo with counts; tapping 'Ordine effettuato' moves the client into Effettuati filter with undo button; undo returns client to Da gestire; 'Aggiungi cliente' modal opens with group chips, agent chips (admin only), existing/new toggle, search input (add-search) and new-client fields (new-ragione/citta/provincia/telefono). Andrea correctly sees only own clients on bonfissuto/natale (1: Macelleria Chiarello Francesco). Persistent non-blocking RN-web warnings ('shadow*' -> boxShadow, props.pointerEvents -> style.pointerEvents) unchanged from prior iterations. No new bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning still: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Same as iterations 1-3."},
+      {"component": "styles (various)", "issue": "RN Web console warning still: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Same as iterations 1-3."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_recurrences.py",
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_agendavisite.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, low priority) Migrate RN Web deprecated style props: shadow* -> boxShadow, pointerEvents prop -> style.pointerEvents.",
+    "(Optional, hardening) test_recurrences with xdist can flake if two workers pick the same 'first mazzetti client with giro_id' concurrently for order/undo. Serial run (or unique client selection per test) avoids it. Not a product bug — pytest.ini uses -n auto --dist loadscope, sufficient for current pass. Consider parameterizing to distinct clients if you want fully parallel-safe."
+  ],
+  "critical_code_review_comments": [
+    "server.py: recurrence order writes only to db.events (type=recurrence_order) and _recurrence_done_ids filters by (recurrence_company, recurrence_period, calendar-year start in Rome tz). Independence across companies/periods is enforced by the query filter — verified end-to-end.",
+    "server.py add_recurrence_member: when body.client_id is provided the client is linked in-place (no giro_id mutation). When creating a new recurrence-only client, giro_id=None and extra.recurrence_only=True are set correctly — verified via test.",
+    "server.py recurrence_members correctly filters by agent for non-admin users; order/undo raise 403 for agent on other agents' clients — verified.",
+    "Seed idempotency: _recurrences_seeded_v1_ marker in db.app_meta prevents re-seeding across restarts. Definitions are upserted on every startup by 'existing = find_one({company})' guard.",
+    "recurrence-only clients have giro_id=None so they must not appear in giro listings; confirmed the anagrafica endpoints keep filtering by deleted_at only.",
+    "conftest.py had outdated password ('Umberto2026!'/'Andrea2026!') causing all authenticated tests in test_agendavisite.py to 401. Fixed to match backend/.env SEED_UMBERTO_PASSWORD/SEED_ANDREA_PASSWORD (Umberto2774!/Andrea1606!)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_recurrences.py (new — 15 tests covering the full ricorrenze feature)",
+    "/app/backend/tests/conftest.py (password fix: 2026 -> real .env values)",
+    "/app/backend/tests/test_agendavisite.py (password fix on login assertions)"
+  ],
+  "success_rate": {"backend": "100% (62/62)", "frontend": "100% of ricorrenze critical flows (tab visibility per role, list of aziende, period+filter chips, order/undo, add-modal existing/new, agent isolation on bonfissuto)"},
+  "seed_data_creation": "test_recurrences.py creates temporary artefacts and cleans up in-test: (a) links one existing client to mazzetti then DELETEs the membership; (b) creates a TEST_REC_* recurrence-only client (giro_id=None) then removes membership and DELETEs the client. No residual TEST_ data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Recurrences testIDs (mobile UI): recurrence-mazzetti / recurrence-bonfissuto (list); on detail: ric-back, ric-add, period-<key> (pasqua|natale), filter-da-gestire, filter-effettuati, order-<clientId>, undo-<clientId>, ric-add-footer; on add modal: add-close, add-search, pick-<clientId>, new-ragione, new-citta, new-provincia, new-telefono, add-submit. Backend endpoints: GET /api/recurrences, GET /api/recurrences/{company}/members?period=..., POST /api/recurrences/{company}/order {client_id,period}, POST /api/recurrences/{company}/order/undo, POST /api/recurrences/{company}/members {client_id or ragione_sociale+..., group, agent?}, DELETE /api/recurrences/{company}/members/{member_id} (admin). Auth: admin=umberto/Umberto2774!, agent=andrea/Andrea1606! (from backend/.env, mirrored in /app/memory/test_credentials.md). Andrea gets 403 on order for a client whose agent!='andrea'. Full backend suite: pytest /app/backend/tests/ = 62/62.",
+  "rca_of_issue": "N/A — no bug found in iteration 4 scope. All Ricorrenze features (definitions listing, members listing with agent-filtering, order/undo, cross-company/period independence, add existing/new client, agent permissions, integrity of giri) work end-to-end. Two pre-existing test-setup bugs (outdated passwords in conftest.py and test_agendavisite.py) were fixed in-place so the regression suite runs clean."
+}

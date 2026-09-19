@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
 import seed_data
+import recurrence_seed
+import unicodedata
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -199,6 +201,8 @@ def event_public(doc: dict) -> dict:
         "reschedule_until": iso(doc.get("reschedule_until")),
         "agent": doc.get("agent"),
         "created_at": iso(doc.get("created_at")),
+        "recurrence_company": doc.get("recurrence_company"),
+        "recurrence_period": doc.get("recurrence_period"),
     }
 
 
@@ -313,6 +317,108 @@ async def seed():
         assigned = sum(1 for d in docs if d["giro_id"])
         logger.info("Imported %d clients (%d assigned, %d da verificare, %d deleted, %d extra)",
                     len(docs), assigned, len(docs) - assigned, deleted, len(seed_data.EXTRA_CLIENTS))
+
+    await seed_recurrences()
+
+
+def _norm(s) -> str:
+    if s is None:
+        return ""
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+    s = s.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+async def seed_recurrences():
+    # Seed recurrence definitions (idempotent by company key).
+    for d in recurrence_seed.RECURRENCE_DEFS:
+        existing = await db.recurrence_defs.find_one({"company": d["company"]})
+        if not existing:
+            await db.recurrence_defs.insert_one({
+                "id": str(uuid.uuid4()),
+                "company": d["company"],
+                "label": d["label"],
+                "periods": d["periods"],
+                "groups": d["groups"],
+                "order": d["order"],
+                "created_at": now_utc(),
+            })
+
+    # Import members once (guard marker).
+    marker = await db.app_meta.find_one({"key": "recurrences_seeded_v1"})
+    if marker:
+        return
+
+    # Build lookup of existing active clients by normalized name(+city).
+    existing = await db.clients.find({"deleted_at": None}, {"_id": 0, "id": 1, "ragione_sociale": 1, "citta": 1, "agent": 1}).to_list(20000)
+    by_namecity = {}
+    for c in existing:
+        key = _norm(c.get("ragione_sociale")) + "|" + _norm(c.get("citta"))
+        by_namecity.setdefault(key, c)
+
+    total, matched, created = 0, 0, 0
+    for company, members in recurrence_seed.RECURRENCE_MEMBERS.items():
+        pos_by_group = {}
+        for m in members:
+            total += 1
+            key = _norm(m["ragione_sociale"]) + "|" + _norm(m["citta"])
+            match = by_namecity.get(key)
+            if match:
+                client_id = match["id"]
+                agent = match.get("agent") or m["agent"]
+                matched += 1
+            else:
+                # Recurrence-only new client: no territorial giro, flagged for review
+                # unless explicitly declared new in the prompt.
+                client_id = str(uuid.uuid4())
+                agent = m["agent"]
+                await db.clients.insert_one({
+                    "id": client_id,
+                    "ragione_sociale": m["ragione_sociale"],
+                    "codice_azienda": m.get("codice_azienda", ""),
+                    "provincia": m.get("provincia", ""),
+                    "giro_id": None,
+                    "position": 999,
+                    "citta": m.get("citta", ""),
+                    "zona": m.get("citta", ""),
+                    "indirizzo": m.get("indirizzo", ""),
+                    "cap": m.get("cap", ""),
+                    "telefono": m.get("telefono", ""),
+                    "email": m.get("email", ""),
+                    "agent": agent,
+                    "permanent_note": "",
+                    "last_visit_at": None,
+                    "snoozed_until": None,
+                    "extra": {
+                        "recurrence_only": True,
+                        "needs_review": not m.get("explicit_new", False),
+                        "partita_iva": m.get("partita_iva", ""),
+                        "codice_fiscale": m.get("codice_fiscale", ""),
+                    },
+                    "created_by": agent,
+                    "deleted_at": None,
+                    "created_at": now_utc(),
+                })
+                created += 1
+            g = m["group"]
+            pos = pos_by_group.get(g, 0)
+            pos_by_group[g] = pos + 1
+            # Avoid duplicate membership for same (company, client).
+            dup = await db.recurrence_members.find_one({"company": company, "client_id": client_id})
+            if not dup:
+                await db.recurrence_members.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "company": company,
+                    "client_id": client_id,
+                    "group": g,
+                    "position": pos,
+                    "agent": agent,
+                    "created_at": now_utc(),
+                })
+
+    await db.app_meta.insert_one({"key": "recurrences_seeded_v1", "at": now_utc()})
+    logger.info("Recurrences seeded: %d members (%d matched existing, %d created new)", total, matched, created)
 
 
 @app.on_event("startup")
@@ -661,6 +767,229 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         )
 
     return event_public(doc)
+
+
+# ---------------------------------------------------------------------------
+# Recurrences (Ricorrenze) — separate from territorial giri
+# ---------------------------------------------------------------------------
+class RecurrenceOrderBody(BaseModel):
+    client_id: str
+    period: str
+
+
+class RecurrenceMemberCreate(BaseModel):
+    group: str
+    period: Optional[str] = None
+    client_id: Optional[str] = None
+    ragione_sociale: Optional[str] = None
+    citta: Optional[str] = ""
+    provincia: Optional[str] = ""
+    indirizzo: Optional[str] = ""
+    cap: Optional[str] = ""
+    telefono: Optional[str] = ""
+    email: Optional[str] = ""
+    agent: Optional[str] = None
+
+
+def _rome_year_start() -> datetime:
+    now_rome = now_utc().astimezone(ROME)
+    return datetime(now_rome.year, 1, 1, tzinfo=ROME).astimezone(timezone.utc)
+
+
+async def _recurrence_done_ids(company: str, period: str, client_ids: List[str]) -> dict:
+    """Return {client_id: order_iso_date} for orders placed this calendar year."""
+    if not client_ids:
+        return {}
+    start = _rome_year_start()
+    cursor = db.events.find(
+        {"type": "recurrence_order", "recurrence_company": company,
+         "recurrence_period": period, "client_id": {"$in": client_ids},
+         "created_at": {"$gte": start}, "deleted_at": None},
+        {"_id": 0, "client_id": 1, "created_at": 1},
+    )
+    out = {}
+    async for e in cursor:
+        cid = e["client_id"]
+        if cid not in out:
+            out[cid] = iso(e["created_at"])
+    return out
+
+
+async def _get_recur_def(company: str) -> dict:
+    d = await db.recurrence_defs.find_one({"company": company}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Ricorrenza non trovata")
+    return d
+
+
+@api.get("/recurrences")
+async def list_recurrences(user=Depends(get_current_user)):
+    defs = await db.recurrence_defs.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    return defs
+
+
+@api.get("/recurrences/{company}/members")
+async def recurrence_members(company: str, period: str = Query(...), user=Depends(get_current_user)):
+    rdef = await _get_recur_def(company)
+    if period not in [p["key"] for p in rdef["periods"]]:
+        raise HTTPException(status_code=400, detail="Periodo non valido")
+
+    members = await db.recurrence_members.find({"company": company}, {"_id": 0}).to_list(20000)
+    client_ids = [m["client_id"] for m in members]
+    clients = await db.clients.find(
+        {"id": {"$in": client_ids}, "deleted_at": None}, {"_id": 0}
+    ).to_list(20000)
+    cmap = {c["id"]: c for c in clients}
+
+    is_admin = user.get("role") == "admin"
+    visible = []
+    for m in members:
+        cli = cmap.get(m["client_id"])
+        if not cli:
+            continue  # client deleted
+        if not is_admin and cli.get("agent") != user["username"]:
+            continue
+        visible.append((m, cli))
+
+    done = await _recurrence_done_ids(company, period, [c["id"] for _, c in visible])
+
+    # Group by recurrence group, preserving def group order then position.
+    group_order = {g: i for i, g in enumerate(rdef["groups"])}
+    visible.sort(key=lambda mc: (group_order.get(mc[0]["group"], 999),
+                                 mc[0].get("position", 999),
+                                 mc[1].get("ragione_sociale", "").lower()))
+    groups_out = []
+    current = None
+    for m, cli in visible:
+        if current is None or current["group"] != m["group"]:
+            current = {"group": m["group"], "clients": []}
+            groups_out.append(current)
+        pub = client_public(cli)
+        pub["recurrence_status"] = "ordine_effettuato" if cli["id"] in done else "da_gestire"
+        pub["order_date"] = done.get(cli["id"])
+        pub["member_id"] = m["id"]
+        current["clients"].append(pub)
+
+    return {"company": company, "period": period, "groups": groups_out}
+
+
+@api.post("/recurrences/{company}/order")
+async def recurrence_order(company: str, body: RecurrenceOrderBody, user=Depends(get_current_user)):
+    rdef = await _get_recur_def(company)
+    if body.period not in [p["key"] for p in rdef["periods"]]:
+        raise HTTPException(status_code=400, detail="Periodo non valido")
+    cli = await db.clients.find_one({"id": body.client_id, "deleted_at": None}, {"_id": 0})
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    if user.get("role") != "admin" and cli.get("agent") != user["username"]:
+        raise HTTPException(status_code=403, detail="Non puoi gestire questo cliente")
+    now = now_utc()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "client_id": body.client_id,
+        "type": "recurrence_order",
+        "company_id": None,
+        "company_name": None,
+        "note_text": None,
+        "reschedule_until": None,
+        "recurrence_company": company,
+        "recurrence_period": body.period,
+        "agent": user["username"],
+        "created_at": now,
+        "deleted_at": None,
+    }
+    await db.events.insert_one(doc)
+    return {"ok": True, "order_date": iso(now)}
+
+
+@api.post("/recurrences/{company}/order/undo")
+async def recurrence_order_undo(company: str, body: RecurrenceOrderBody, user=Depends(get_current_user)):
+    cli = await db.clients.find_one({"id": body.client_id, "deleted_at": None}, {"_id": 0})
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    if user.get("role") != "admin" and cli.get("agent") != user["username"]:
+        raise HTTPException(status_code=403, detail="Non puoi gestire questo cliente")
+    start = _rome_year_start()
+    await db.events.update_many(
+        {"type": "recurrence_order", "recurrence_company": company,
+         "recurrence_period": body.period, "client_id": body.client_id,
+         "created_at": {"$gte": start}, "deleted_at": None},
+        {"$set": {"deleted_at": now_utc()}},
+    )
+    return {"ok": True}
+
+
+@api.post("/recurrences/{company}/members")
+async def add_recurrence_member(company: str, body: RecurrenceMemberCreate, user=Depends(get_current_user)):
+    rdef = await _get_recur_def(company)
+    if body.group not in rdef["groups"]:
+        raise HTTPException(status_code=400, detail="Gruppo non valido")
+
+    agent = user["username"]
+    if user.get("role") == "admin" and body.agent in VALID_AGENTS:
+        agent = body.agent
+
+    if body.client_id:
+        cli = await db.clients.find_one({"id": body.client_id, "deleted_at": None}, {"_id": 0})
+        if not cli:
+            raise HTTPException(status_code=404, detail="Cliente non trovato")
+        if user.get("role") != "admin" and cli.get("agent") != user["username"]:
+            raise HTTPException(status_code=403, detail="Non puoi aggiungere questo cliente")
+        client_id = cli["id"]
+        agent = cli.get("agent") or agent
+    else:
+        if not (body.ragione_sociale and body.ragione_sociale.strip()):
+            raise HTTPException(status_code=400, detail="Ragione sociale obbligatoria")
+        client_id = str(uuid.uuid4())
+        await db.clients.insert_one({
+            "id": client_id,
+            "ragione_sociale": body.ragione_sociale.strip(),
+            "codice_azienda": "",
+            "provincia": (body.provincia or "").strip(),
+            "giro_id": None,
+            "position": 999,
+            "citta": (body.citta or "").strip(),
+            "zona": (body.citta or "").strip(),
+            "indirizzo": (body.indirizzo or "").strip(),
+            "cap": (body.cap or "").strip(),
+            "telefono": (body.telefono or "").strip(),
+            "email": (body.email or "").strip(),
+            "agent": agent,
+            "permanent_note": "",
+            "last_visit_at": None,
+            "snoozed_until": None,
+            "extra": {"recurrence_only": True, "needs_review": False},
+            "created_by": user["username"],
+            "deleted_at": None,
+            "created_at": now_utc(),
+        })
+
+    dup = await db.recurrence_members.find_one({"company": company, "client_id": client_id})
+    if dup:
+        raise HTTPException(status_code=400, detail="Cliente già presente in questa ricorrenza")
+
+    last = await db.recurrence_members.find(
+        {"company": company, "group": body.group}, {"_id": 0, "position": 1}
+    ).sort("position", -1).to_list(1)
+    pos = (last[0]["position"] + 1) if last else 0
+    await db.recurrence_members.insert_one({
+        "id": str(uuid.uuid4()),
+        "company": company,
+        "client_id": client_id,
+        "group": body.group,
+        "position": pos,
+        "agent": agent,
+        "created_at": now_utc(),
+    })
+    return {"ok": True, "client_id": client_id}
+
+
+@api.delete("/recurrences/{company}/members/{member_id}")
+async def remove_recurrence_member(company: str, member_id: str, user=Depends(require_admin)):
+    res = await db.recurrence_members.delete_one({"id": member_id, "company": company})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Voce non trovata")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

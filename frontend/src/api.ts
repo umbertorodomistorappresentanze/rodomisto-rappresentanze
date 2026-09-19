@@ -107,11 +107,30 @@ export type Client = {
 export type VisitEvent = {
   id: string;
   client_id: string;
-  type: "visit" | "order" | "reschedule" | "collection" | "note";
+  type: "visit" | "order" | "reschedule" | "collection" | "note" | "recurrence_order";
   company_id: string | null;
   company_name: string | null;
   note_text: string | null;
   reschedule_until: string | null;
   agent: string | null;
   created_at: string;
+  recurrence_company?: string | null;
+  recurrence_period?: string | null;
 };
+
+export type RecurrencePeriod = { key: string; label: string; start: string; end: string };
+export type RecurrenceDef = {
+  id: string;
+  company: string;
+  label: string;
+  periods: RecurrencePeriod[];
+  groups: string[];
+  order: number;
+};
+export type RecurrenceClient = Client & {
+  recurrence_status: "da_gestire" | "ordine_effettuato";
+  order_date: string | null;
+  member_id: string;
+};
+export type RecurrenceGroup = { group: string; clients: RecurrenceClient[] };
+export type RecurrenceMembers = { company: string; period: string; groups: RecurrenceGroup[] };
