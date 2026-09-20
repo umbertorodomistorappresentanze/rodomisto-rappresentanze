@@ -22,6 +22,11 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Import (2026-09-20) — "clienti menu.xlsx"
+- Import anagrafica da file (141 righe → 121 unici, 20 duplicati interni ignorati). Dedup per Partita IVA/CF/ragione sociale.
+- 97 già presenti (match per P.IVA) → invariati. 22 nuovi creati e assegnati al giro via Descrizione Zona (Catanzaro e Limitrofi 8, Altilia 6, Guardavalle 4, Crotone 3, Sila Piccola 1), aggiunti IN FONDO al giro (ordine esistente invariato, verificato 0 modifiche alle posizioni). 2 "da verificare" (zona MONTEPAONE LIDO) creati senza giro.
+- 0 duplicati introdotti. Giri/ricorrenze/sospesi/storico invariati. Nota: restano 13 P.IVA duplicate PRE-ESISTENTI (seed originale + import ricorrenze, es. La conca d'oro), non toccate da questo import.
+
 ## Implemented (2026-09-20) — iterazione 7 (SOSPESI nei giri territoriali)
 - **Indicatore 🔴 SOSPESO** nella lista del giro: accanto al cliente compaiono i nomi delle aziende con sospeso attivo (es. "Librandi · Pellegrini"), senza importi/fatture. Calcolo dinamico dagli eventi (nessuna collezione contabile separata).
 - **Azioni rapide** dal giro (bottom sheet), senza aprire l'anagrafica. Modifiche pulsanti:
