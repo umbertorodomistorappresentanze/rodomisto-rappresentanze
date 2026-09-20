@@ -257,8 +257,9 @@ class TestEvents:
 
     def test_collection_event(self, api, umberto_headers):
         c = self._get_client(api, umberto_headers)
+        comps = api.get(f"{BASE_URL}/api/companies", headers=umberto_headers).json()
         r = api.post(f"{BASE_URL}/api/events",
-                     json={"client_id": c["id"], "type": "collection"},
+                     json={"client_id": c["id"], "type": "collection", "company_id": comps[0]["id"]},
                      headers=umberto_headers)
         assert r.status_code == 200
 

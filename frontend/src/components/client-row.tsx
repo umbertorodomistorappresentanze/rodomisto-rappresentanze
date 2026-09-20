@@ -1,5 +1,5 @@
 import { Pressable, View } from "react-native";
-import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone } from "phosphor-react-native";
+import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone, Warning } from "phosphor-react-native";
 
 import { Client } from "@/src/api";
 import { AppText } from "@/src/components/ui";
@@ -23,6 +23,12 @@ const useStyles = makeStyles((c) => ({
   name: { fontSize: 16, color: c.onSurface },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
   meta: { fontSize: 13, color: c.muted },
+  suspBox: {
+    flexDirection: "row", alignItems: "center", gap: spacing.xs,
+    backgroundColor: "#FEE2E2", borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 3, marginTop: 3, alignSelf: "flex-start",
+  },
+  suspText: { fontSize: 12, color: "#B91C1C" },
   pill: {
     alignSelf: "flex-start",
     borderRadius: radius.pill,
@@ -99,6 +105,14 @@ export function ClientRow({
           <View style={styles.metaRow}>
             <Phone size={13} color={colors.muted} weight="bold" />
             <AppText style={styles.meta}>{client.telefono}</AppText>
+          </View>
+        ) : null}
+        {client.suspensions && client.suspensions.length > 0 ? (
+          <View style={styles.suspBox}>
+            <Warning size={13} color="#B91C1C" weight="fill" />
+            <AppText weight="semibold" style={styles.suspText} numberOfLines={2}>
+              {client.suspensions.join(" · ")}
+            </AppText>
           </View>
         ) : null}
         <View style={[styles.pill, { backgroundColor: pillBg }]}>

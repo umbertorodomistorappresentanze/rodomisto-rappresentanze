@@ -103,7 +103,9 @@ export type Client = {
   extra: ClientExtra;
   status?: "da_visitare" | "gestito";
   handled_today?: boolean;
+  suspensions?: string[];
 };
+export type PaymentMode = { key: string; label: string; days: number | null };
 export type VisitEvent = {
   id: string;
   client_id: string;
@@ -116,6 +118,9 @@ export type VisitEvent = {
   created_at: string;
   recurrence_company?: string | null;
   recurrence_period?: string | null;
+  payment_mode?: string | null;
+  payment_mode_label?: string | null;
+  due_at?: string | null;
 };
 
 export type RecurrencePeriod = { key: string; label: string; start: string; end: string };

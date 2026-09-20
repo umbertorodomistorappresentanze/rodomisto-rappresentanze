@@ -4,14 +4,16 @@ import { BottomSheetBackdrop, BottomSheetModal, BottomSheetView } from "@gorhom/
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ArrowBendUpLeft,
-  CheckCircle,
+  CaretLeft,
+  CreditCard,
   CurrencyEur,
   NotePencil,
   Storefront,
+  Warning,
   X,
 } from "phosphor-react-native";
 
-import { apiPost, Client, Company } from "@/src/api";
+import { apiPost, Client, Company, PaymentMode } from "@/src/api";
 import { AppText, Button } from "@/src/components/ui";
 import { fonts, radius, spacing, useTheme } from "@/src/theme";
 
@@ -20,7 +22,7 @@ export type QuickActionsRef = {
   dismiss: () => void;
 };
 
-type Mode = "main" | "order" | "reschedule" | "note";
+type Mode = "main" | "order" | "reschedule" | "note" | "collection" | "suspension";
 
 const RESCHEDULE_OPTIONS = [
   { label: "Tra 3 giorni", days: 3 },
@@ -33,10 +35,11 @@ export const QuickActionsSheet = forwardRef<
   QuickActionsRef,
   {
     companies: Company[];
+    paymentModes: PaymentMode[];
     onSuccess: (message: string) => void;
     onError: (message: string) => void;
   }
->(function QuickActionsSheet({ companies, onSuccess, onError }, ref) {
+>(function QuickActionsSheet({ companies, paymentModes, onSuccess, onError }, ref) {
   const modalRef = useRef<BottomSheetModal>(null);
   const { colors } = useTheme();
   const [client, setClient] = useState<Client | null>(null);
@@ -44,12 +47,14 @@ export const QuickActionsSheet = forwardRef<
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [orderCompany, setOrderCompany] = useState<Company | null>(null);
 
   useImperativeHandle(ref, () => ({
     present: (c: Client) => {
       setClient(c);
       setMode("main");
       setNote("");
+      setOrderCompany(null);
       modalRef.current?.present();
     },
     dismiss: () => modalRef.current?.dismiss(),
@@ -142,7 +147,11 @@ export const QuickActionsSheet = forwardRef<
             mode === "main"
               ? client?.ragione_sociale ?? ""
               : mode === "order"
-              ? "Ordine effettuato"
+              ? (orderCompany ? "Modalità di pagamento" : "Ordine · scegli azienda")
+              : mode === "collection"
+              ? "Incassato · scegli azienda"
+              : mode === "suspension"
+              ? "Sospeso · scegli azienda"
               : mode === "reschedule"
               ? "Visita rimandata"
               : "Nota della visita"
@@ -152,32 +161,32 @@ export const QuickActionsSheet = forwardRef<
         {mode === "main" ? (
           <View style={styles.grid}>
             <ActionTile
-              testID="action-visitato"
-              icon={<CheckCircle size={26} color={colors.onBrand} weight="fill" />}
-              label="Visitato"
-              color={colors.brand}
-              bg={colors.brandSecondary}
-              onPress={() => submit({ type: "visit" }, "Visita registrata")}
-            />
-            <ActionTile
               testID="action-ordine"
               icon={<Storefront size={26} color={colors.onBrand} weight="fill" />}
               label="Ordine effettuato"
               color={colors.brandPrimary}
               bg={colors.brandSecondary}
-              onPress={() => setMode("order")}
+              onPress={() => { setOrderCompany(null); setMode("order"); }}
             />
             <ActionTile
               testID="action-incassato"
-              icon={<CurrencyEur size={26} color={colors.onSuccess} weight="fill" />}
+              icon={<CurrencyEur size={26} color={colors.onBrand} weight="fill" />}
               label="Incassato"
               color={colors.success}
               bg={colors.brandSecondary}
-              onPress={() => submit({ type: "collection" }, "Incasso registrato")}
+              onPress={() => setMode("collection")}
+            />
+            <ActionTile
+              testID="action-sospeso"
+              icon={<Warning size={26} color={colors.onBrand} weight="fill" />}
+              label="+ Sospeso"
+              color={colors.error}
+              bg={colors.surfaceTertiary}
+              onPress={() => setMode("suspension")}
             />
             <ActionTile
               testID="action-rimandata"
-              icon={<ArrowBendUpLeft size={26} color={colors.onWarning} weight="fill" />}
+              icon={<ArrowBendUpLeft size={26} color={colors.onBrand} weight="fill" />}
               label="Visita rimandata"
               color={colors.warning}
               bg={colors.surfaceTertiary}
@@ -196,16 +205,78 @@ export const QuickActionsSheet = forwardRef<
 
         {mode === "order" ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
-            <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
+            {!orderCompany ? (
+              <>
+                <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
+                {companies.map((co) => (
+                  <Pressable
+                    key={co.id}
+                    testID={`order-company-${co.id}`}
+                    onPress={() => setOrderCompany(co)}
+                    style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
+                  >
+                    <Storefront size={20} color={colors.brand} weight="bold" />
+                    <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
+                  </Pressable>
+                ))}
+              </>
+            ) : (
+              <>
+                <Pressable testID="order-back" onPress={() => setOrderCompany(null)} style={styles.backLink}>
+                  <CaretLeft size={16} color={colors.brand} weight="bold" />
+                  <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
+                </Pressable>
+                <AppText style={styles.hint}>Modalità di pagamento (solo per questo ordine)</AppText>
+                {paymentModes.map((pm) => (
+                  <Pressable
+                    key={pm.key}
+                    testID={`order-pay-${pm.key}`}
+                    disabled={busy}
+                    onPress={() => submit(
+                      { type: "order", company_id: orderCompany.id, payment_mode: pm.key },
+                      `Ordine ${orderCompany.name} registrato`
+                    )}
+                    style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
+                  >
+                    <CreditCard size={20} color={colors.brand} weight="bold" />
+                    <AppText weight="semibold" style={styles.rowItemText}>{pm.label}</AppText>
+                  </Pressable>
+                ))}
+              </>
+            )}
+          </ScrollView>
+        ) : null}
+
+        {mode === "collection" ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
+            <AppText style={styles.hint}>Azienda di cui registrare l&apos;incasso (chiude il sospeso)</AppText>
             {companies.map((co) => (
               <Pressable
                 key={co.id}
-                testID={`order-company-${co.id}`}
+                testID={`collection-company-${co.id}`}
                 disabled={busy}
-                onPress={() => submit({ type: "order", company_id: co.id }, `Ordine ${co.name} registrato`)}
+                onPress={() => submit({ type: "collection", company_id: co.id }, `Incasso ${co.name} registrato`)}
                 style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
               >
-                <Storefront size={20} color={colors.brand} weight="bold" />
+                <CurrencyEur size={20} color={colors.success} weight="bold" />
+                <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        {mode === "suspension" ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
+            <AppText style={styles.hint}>Azienda del sospeso da segnare come attivo</AppText>
+            {companies.map((co) => (
+              <Pressable
+                key={co.id}
+                testID={`suspension-company-${co.id}`}
+                disabled={busy}
+                onPress={() => submit({ type: "suspension", company_id: co.id }, `Sospeso ${co.name} aggiunto`)}
+                style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
+              >
+                <Warning size={20} color={colors.error} weight="bold" />
                 <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
               </Pressable>
             ))}
@@ -327,6 +398,8 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       borderColor: c.border,
     },
     rowItemText: { fontSize: 16, color: c.onSurface },
+    backLink: { flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingVertical: spacing.xs, marginBottom: spacing.xs },
+    backLinkText: { fontSize: 14, color: c.brand },
     chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
     bigChip: {
       width: "47.5%",

@@ -18,6 +18,7 @@ import {
   Phone,
   Storefront,
   Trash,
+  Warning,
   WhatsappLogo,
 } from "phosphor-react-native";
 
@@ -34,6 +35,8 @@ const EVENT_META: Record<string, { label: string; icon: any }> = {
   collection: { label: "Incasso", icon: CurrencyEur },
   reschedule: { label: "Visita rimandata", icon: ArrowBendUpLeft },
   note: { label: "Nota", icon: NotePencil },
+  suspension: { label: "Sospeso aggiunto", icon: Warning },
+  recurrence_order: { label: "Ordine ricorrenza", icon: Storefront },
 };
 
 function waNumber(raw: string): string {
@@ -270,10 +273,16 @@ export default function ClientDetail() {
           ) : (
             <View style={{ gap: spacing.sm }}>
               {(historyQuery.data ?? []).map((ev) => {
-                const meta = EVENT_META[ev.type];
+                const meta = EVENT_META[ev.type] ?? { label: ev.type, icon: NotePencil };
                 const Icon = meta.icon;
                 let detail = "";
-                if (ev.type === "order" && ev.company_name) detail = ev.company_name;
+                if (ev.type === "order" && ev.company_name) {
+                  detail = ev.payment_mode_label ? `${ev.company_name} · ${ev.payment_mode_label}` : ev.company_name;
+                  if (ev.due_at) detail += ` · scad. ${shortDate(ev.due_at)}`;
+                }
+                if (ev.type === "collection" && ev.company_name) detail = `Incasso ${ev.company_name}`;
+                if (ev.type === "suspension" && ev.company_name) detail = ev.company_name;
+                if (ev.type === "recurrence_order" && ev.recurrence_company) detail = `${ev.recurrence_company} · ${ev.recurrence_period ?? ""}`;
                 if (ev.type === "note" && ev.note_text) detail = ev.note_text;
                 if (ev.type === "reschedule" && ev.reschedule_until) detail = `Rivedere il ${shortDate(ev.reschedule_until)}`;
                 return (

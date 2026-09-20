@@ -40,6 +40,18 @@ ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
 ROME = ZoneInfo("Europe/Rome")
 VISIT_THRESHOLD_DAYS = 21
 
+# Payment modes selectable per single order. days=None means no future suspension.
+PAYMENT_MODES = {
+    "anticipato": {"label": "Anticipato", "days": None},
+    "contrassegno": {"label": "Contrassegno", "days": None},
+    "bonifico_30": {"label": "Bonifico bancario 30 giorni", "days": 30},
+    "bonifico_60": {"label": "Bonifico bancario 60 giorni", "days": 60},
+    "agente_30": {"label": "Pagamento mezzo Agente 30 giorni", "days": 30},
+    "agente_60": {"label": "Pagamento mezzo Agente 60 giorni", "days": 60},
+    "agente_90": {"label": "Pagamento mezzo Agente 90 giorni", "days": 90},
+}
+PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "agente_30", "agente_60", "agente_90"]
+
 app = FastAPI(title="AgendaVisite API")
 api = APIRouter(prefix="/api")
 bearer = HTTPBearer(auto_error=False)
@@ -159,11 +171,12 @@ class ClientUpdate(BaseModel):
 
 class EventCreate(BaseModel):
     client_id: str
-    type: str  # visit | order | reschedule | collection | note
+    type: str  # order | collection | reschedule | note | suspension | visit(legacy)
     company_id: Optional[str] = None
     note_text: Optional[str] = None
     reschedule_days: Optional[int] = None
     reschedule_date: Optional[str] = None  # ISO date string
+    payment_mode: Optional[str] = None  # for orders
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +216,9 @@ def event_public(doc: dict) -> dict:
         "created_at": iso(doc.get("created_at")),
         "recurrence_company": doc.get("recurrence_company"),
         "recurrence_period": doc.get("recurrence_period"),
+        "payment_mode": doc.get("payment_mode"),
+        "payment_mode_label": PAYMENT_MODES.get(doc.get("payment_mode"), {}).get("label") if doc.get("payment_mode") else None,
+        "due_at": iso(doc.get("due_at")),
     }
 
 
@@ -552,13 +568,67 @@ async def _handled_today_ids(client_ids: List[str]) -> set:
         return set()
     start = start_of_today_utc()
     cursor = db.events.find(
-        {"client_id": {"$in": client_ids}, "created_at": {"$gte": start}, "deleted_at": None},
+        {"client_id": {"$in": client_ids}, "created_at": {"$gte": start}, "deleted_at": None,
+         "type": {"$nin": ["suspension"]}},
         {"_id": 0, "client_id": 1},
     )
     ids = set()
     async for e in cursor:
         ids.add(e["client_id"])
     return ids
+
+
+async def _active_suspensions_for(client_ids: List[str]) -> dict:
+    """Return {client_id: [company_name,...]} of currently active suspensions.
+    A suspension (manual event or overdue deferred order) for a company is active
+    unless a later 'collection' (incassato) for that same company settled it.
+    """
+    if not client_ids:
+        return {}
+    now = now_utc()
+    events = await db.events.find(
+        {"client_id": {"$in": client_ids}, "deleted_at": None,
+         "type": {"$in": ["order", "suspension", "collection"]}},
+        {"_id": 0},
+    ).to_list(200000)
+
+    from collections import defaultdict
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    data = defaultdict(lambda: defaultdict(lambda: {"paid": None, "manual": [], "auto": []}))
+    for e in events:
+        comp = e.get("company_name") or e.get("company_id")
+        if not comp:
+            continue
+        cid = e["client_id"]
+        created = _aware(e.get("created_at"))
+        slot = data[cid][comp]
+        if e["type"] == "collection":
+            if slot["paid"] is None or (created and created > slot["paid"]):
+                slot["paid"] = created
+        elif e["type"] == "suspension":
+            slot["manual"].append(created)
+        elif e["type"] == "order":
+            due = _aware(e.get("due_at"))
+            if due is not None and due <= now:
+                slot["auto"].append(created)
+
+    result = {}
+    for cid, comps in data.items():
+        active = []
+        for comp, slot in comps.items():
+            paid = slot["paid"]
+            man = any(paid is None or (c and c > paid) for c in slot["manual"])
+            auto = any(paid is None or (c and c > paid) for c in slot["auto"])
+            if man or auto:
+                active.append(comp)
+        if active:
+            result[cid] = sorted(active, key=lambda x: x.lower())
+    return result
 
 
 def _compute_status(doc: dict, handled_today: set) -> str:
@@ -589,11 +659,13 @@ async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)
     docs.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
     ids = [d["id"] for d in docs]
     handled = await _handled_today_ids(ids)
+    suspensions = await _active_suspensions_for(ids)
     result = []
     for d in docs:
         pub = client_public(d)
         pub["status"] = _compute_status(d, handled)
         pub["handled_today"] = d["id"] in handled
+        pub["suspensions"] = suspensions.get(d["id"], [])
         result.append(pub)
     return result
 
@@ -661,7 +733,10 @@ async def get_client(client_id: str, user=Depends(get_current_user)):
     doc = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
-    return client_public(doc)
+    pub = client_public(doc)
+    susp = await _active_suspensions_for([client_id])
+    pub["suspensions"] = susp.get(client_id, [])
+    return pub
 
 
 @api.put("/clients/{client_id}")
@@ -704,7 +779,12 @@ async def client_history(client_id: str, user=Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Events (quick actions)
 # ---------------------------------------------------------------------------
-VALID_EVENT_TYPES = {"visit", "order", "reschedule", "collection", "note"}
+VALID_EVENT_TYPES = {"visit", "order", "reschedule", "collection", "note", "suspension"}
+
+
+@api.get("/payment-modes")
+async def payment_modes(user=Depends(get_current_user)):
+    return [{"key": k, "label": PAYMENT_MODES[k]["label"], "days": PAYMENT_MODES[k]["days"]} for k in PAYMENT_MODE_ORDER]
 
 
 @api.post("/events")
@@ -724,12 +804,15 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         "company_name": None,
         "note_text": None,
         "reschedule_until": None,
+        "payment_mode": None,
+        "due_at": None,
+        "source": None,
         "agent": user["username"],
         "created_at": now,
         "deleted_at": None,
     }
 
-    if body.type == "order":
+    if body.type in ("order", "collection", "suspension"):
         if not body.company_id:
             raise HTTPException(status_code=400, detail="Seleziona un'azienda")
         comp = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
@@ -737,6 +820,19 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Azienda non trovata")
         doc["company_id"] = comp["id"]
         doc["company_name"] = comp["name"]
+
+    if body.type == "order":
+        # Payment mode chosen for THIS order only (does not touch client anagrafica).
+        if body.payment_mode:
+            if body.payment_mode not in PAYMENT_MODES:
+                raise HTTPException(status_code=400, detail="Modalità di pagamento non valida")
+            doc["payment_mode"] = body.payment_mode
+            days = PAYMENT_MODES[body.payment_mode]["days"]
+            if days is not None:
+                doc["due_at"] = now + timedelta(days=days)
+
+    if body.type == "suspension":
+        doc["source"] = "manual"
 
     if body.type == "note":
         if not (body.note_text and body.note_text.strip()):

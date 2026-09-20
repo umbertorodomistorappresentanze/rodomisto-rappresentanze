@@ -6,7 +6,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { CaretRight, ChartBar, MapTrifold, Plus, SunHorizon, Users } from "phosphor-react-native";
 import { useCallback } from "react";
 
-import { apiGet, Client, Company, Giro } from "@/src/api";
+import { apiGet, Client, Company, Giro, PaymentMode } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, EmptyState, Loading } from "@/src/components/ui";
 import { ClientRow } from "@/src/components/client-row";
@@ -29,6 +29,7 @@ export default function Dashboard() {
 
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiGet<Company[]>("/companies") });
+  const paymentModesQuery = useQuery({ queryKey: ["payment-modes"], queryFn: () => apiGet<PaymentMode[]>("/payment-modes") });
   const selectedGiro = giriQuery.data?.find((g) => g.id === giroId) ?? null;
   const activeGiroId = selectedGiro ? giroId : null;
 
@@ -177,6 +178,7 @@ export default function Dashboard() {
       <QuickActionsSheet
         ref={sheetRef}
         companies={companiesQuery.data ?? []}
+        paymentModes={paymentModesQuery.data ?? []}
         onSuccess={onActionSuccess}
         onError={(m) => toast(m, "error")}
       />

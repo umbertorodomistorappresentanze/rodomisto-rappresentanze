@@ -22,6 +22,19 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-20) — iterazione 7 (SOSPESI nei giri territoriali)
+- **Indicatore 🔴 SOSPESO** nella lista del giro: accanto al cliente compaiono i nomi delle aziende con sospeso attivo (es. "Librandi · Pellegrini"), senza importi/fatture. Calcolo dinamico dagli eventi (nessuna collezione contabile separata).
+- **Azioni rapide** dal giro (bottom sheet), senza aprire l'anagrafica. Modifiche pulsanti:
+  - RIMOSSO "Visitato".
+  - **Ordine effettuato** = scegli azienda (da portafoglio agente) + **modalità di pagamento solo per quell'ordine** (non tocca l'anagrafica). Modalità: Anticipato, Contrassegno, Bonifico 30/60, Agente 30/60/90.
+  - **+ Sospeso** = scegli azienda → sospeso manuale attivo subito (non segna il cliente come "gestito oggi").
+  - **Incassato** = scegli azienda → chiude il sospeso di quell'azienda (le altre restano).
+  - Visita rimandata e Nota invariati.
+- **Scadenze automatiche**: Anticipato/Contrassegno → nessun sospeso. Differiti → due_at = data ordine + 30/60/90 gg; nessun sospeso prima della scadenza; alla scadenza, se non incassato, il cliente mostra 🔴 azienda automaticamente. Incasso prima della scadenza → nessun sospeso.
+- Backend: PAYMENT_MODES, GET /api/payment-modes, event types `order`(+payment_mode,+due_at), `collection`(richiede azienda), `suspension`(manuale). `_active_suspensions_for` calcola i sospesi attivi; esposti in GET /api/clients e /api/clients/{id} come `suspensions[]`. Storico cliente mostra ordini (con modalità/scadenza) e sospesi.
+- Invariati: giri territoriali, ordine clienti, assegnazione Umberto/Andrea, ricorrenze, dati esistenti. Permessi rispettati (andrea solo propri clienti).
+- Verificato: 14/14 test dedicati + 75/76 suite (test obsoleto aggiornato) → tutto verde; UI verificata (🔴 compare/scompare, ordine a 2 passi).
+
 ## Implemented (2026-09-19) — iterazione 6 (RICORRENZE + WEB)
 - **Versione WEB**: la stessa app Expo è accessibile da browser desktop (React Native Web) sullo stesso backend/DB → dati sincronizzati in tempo reale tra telefono e web. Nessun DB separato.
 - **Nuova sezione RICORRENZE** (tab dedicata, sia admin sia agente), completamente separata dai giri territoriali:
