@@ -11,6 +11,7 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { ToastProvider } from "@/src/components/toast";
+import { WebFrame } from "@/src/components/web-frame";
 import { queryClient } from "@/src/query-client";
 import { AuthProvider } from "@/src/auth";
 import { SelectedGiroProvider } from "@/src/selected-giro";
@@ -48,12 +49,14 @@ export default function RootLayout() {
               <SelectedGiroProvider>
                 <BottomSheetModalProvider>
                   <ToastProvider>
+                    <WebFrame>
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="select-giro" options={{ presentation: "modal" }} />
                       <Stack.Screen name="client/new" options={{ presentation: "modal" }} />
                       <Stack.Screen name="client/edit/[id]" options={{ presentation: "modal" }} />
                       <Stack.Screen name="ricorrenza/add/[company]" options={{ presentation: "modal" }} />
                     </Stack>
+                    </WebFrame>
                   </ToastProvider>
                 </BottomSheetModalProvider>
               </SelectedGiroProvider>

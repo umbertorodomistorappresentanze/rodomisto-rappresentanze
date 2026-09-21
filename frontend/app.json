@@ -23,7 +23,14 @@
       "output": "single",
       "favicon": "./assets/images/favicon.png",
       "name": "Rodomisto Rappresentanze",
-      "shortName": "Rodomisto"
+      "shortName": "Rodomisto",
+      "description": "Agenda visite, giri territoriali, ricorrenze e sospesi.",
+      "lang": "it",
+      "display": "standalone",
+      "orientation": "any",
+      "startUrl": "/",
+      "themeColor": "#047857",
+      "backgroundColor": "#FFFFFF"
     },
     "plugins": [
       "expo-router",

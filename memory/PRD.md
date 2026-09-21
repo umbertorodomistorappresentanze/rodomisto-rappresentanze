@@ -22,6 +22,13 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-21) — PWA responsive + web
+- app.json web: display "standalone", themeColor #047857, backgroundColor #FFFFFF, name/shortName "Rodomisto Rappresentanze"/"Rodomisto", lang it, description → manifest PWA + add-to-home + fullscreen standalone (attivi nell'export web/deploy).
+- `document.title` = "Rodomisto Rappresentanze" (titolo scheda browser) via effect web in _layout.
+- Nuovo `src/components/web-frame.tsx`: su web e viewport > 768px (iPad landscape/desktop) centra l'app in colonna maxWidth 820px con bordi laterali; su mobile/native passthrough (nessuna modifica). Applicato attorno allo Stack in _layout.
+- Endpoint /health e /api/health (200) per la sonda di deployment.
+- Nessuna modifica a backend/logica/DB/API. Deploy: da pulsante Publish → Deploy (stesso backend/DB).
+
 ## Implemented (2026-09-21) — Ricerca cliente nel giro
 - Campo "🔎 Cerca cliente" in cima alla lista del giro (Dashboard), visibile quando un giro è attivo. Filtro dinamico lato client per **ragione sociale** o **comune** (case/accento-insensibile).
 - Durante la ricerca: sezione unica "RISULTATI" con i corrispondenti; se vuoto → "Nessun cliente trovato". Cancellando il testo (X) si ripristina la lista completa con ordine e sezioni originali (Da visitare / Gestiti + riepilogo).
