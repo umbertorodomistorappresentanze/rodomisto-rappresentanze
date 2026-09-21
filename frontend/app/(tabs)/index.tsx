@@ -1,10 +1,9 @@
-import { useMemo, useRef } from "react";
-import { Pressable, RefreshControl, SectionList, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Pressable, RefreshControl, SectionList, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { CaretRight, ChartBar, MapTrifold, Plus, SunHorizon, Users } from "phosphor-react-native";
-import { useCallback } from "react";
+import { CaretRight, ChartBar, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, X } from "phosphor-react-native";
 
 import { apiGet, Client, Company, Giro, PaymentMode } from "@/src/api";
 import { useAuth } from "@/src/auth";
@@ -26,6 +25,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { giroId, ready } = useSelectedGiro();
   const sheetRef = useRef<QuickActionsRef>(null);
+  const [search, setSearch] = useState("");
 
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiGet<Company[]>("/companies") });
@@ -46,15 +46,26 @@ export default function Dashboard() {
     }, [activeGiroId])
   );
 
+  const searching = search.trim().length > 0;
+
   const sections = useMemo(() => {
     const list = clientsQuery.data ?? [];
+    if (searching) {
+      const norm = (s: string) =>
+        (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const q = norm(search.trim());
+      const found = list.filter(
+        (c) => norm(c.ragione_sociale).includes(q) || norm(c.citta).includes(q)
+      );
+      return [{ title: "RISULTATI", count: found.length, data: found }];
+    }
     const daVisitare = list.filter((c) => c.status === "da_visitare");
     const gestiti = list.filter((c) => c.status !== "da_visitare");
     const out: { title: string; count: number; data: Client[] }[] = [];
     out.push({ title: "DA VISITARE", count: daVisitare.length, data: daVisitare });
     out.push({ title: "GIÀ VISITATI / GESTITI", count: gestiti.length, data: gestiti });
     return out;
-  }, [clientsQuery.data]);
+  }, [clientsQuery.data, searching, search]);
 
   function onActionSuccess(message: string) {
     toast(message, "success");
@@ -117,6 +128,28 @@ export default function Dashboard() {
           </View>
           <CaretRight size={22} color={colors.onBrand} weight="bold" />
         </Pressable>
+
+        {activeGiroId ? (
+          <View style={styles.searchField}>
+            <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
+            <TextInput
+              testID="giro-search"
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Cerca cliente per nome o comune…"
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searching ? (
+              <Pressable testID="giro-search-clear" onPress={() => setSearch("")} hitSlop={8}>
+                <X size={18} color={colors.muted} weight="bold" />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       {!activeGiroId ? (
@@ -136,7 +169,7 @@ export default function Dashboard() {
             <RefreshControl refreshing={clientsQuery.isFetching} onRefresh={() => clientsQuery.refetch()} tintColor={colors.brand} />
           }
           ListHeaderComponent={
-            (clientsQuery.data?.length ?? 0) > 0 ? (
+            !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
               <View style={styles.summaryCard}>
                 <View style={styles.summaryItem}>
                   <AppText weight="bold" style={styles.summaryNumber}>{sections[0].count}</AppText>
@@ -164,7 +197,11 @@ export default function Dashboard() {
           renderSectionFooter={({ section }) =>
             section.data.length === 0 ? (
               <AppText style={styles.emptySection}>
-                {section.title === "DA VISITARE" ? "Nessun cliente da visitare in questo giro." : "Nessun cliente ancora gestito."}
+                {searching
+                  ? "Nessun cliente trovato"
+                  : section.title === "DA VISITARE"
+                  ? "Nessun cliente da visitare in questo giro."
+                  : "Nessun cliente ancora gestito."}
               </AppText>
             ) : null
           }
@@ -214,6 +251,18 @@ const useStyles = makeStyles((c) => ({
   quickTitle: { fontSize: 15, color: c.onSurface },
   quickSub: { fontSize: 12, color: c.muted },
   blockLabel: { fontSize: 12, color: c.onSurfaceTertiary, letterSpacing: 0.5, marginTop: spacing.xs },
+  searchField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: c.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    height: 46,
+  },
+  searchInput: { flex: 1, fontFamily: "PlusJakarta-Medium", fontSize: 15, color: c.onSurface, paddingVertical: 0 },
   dateRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   date: { fontSize: 13, color: c.muted },
   hello: { fontSize: 22, color: c.onSurface, marginTop: 2 },

@@ -22,6 +22,11 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-21) — Ricerca cliente nel giro
+- Campo "🔎 Cerca cliente" in cima alla lista del giro (Dashboard), visibile quando un giro è attivo. Filtro dinamico lato client per **ragione sociale** o **comune** (case/accento-insensibile).
+- Durante la ricerca: sezione unica "RISULTATI" con i corrispondenti; se vuoto → "Nessun cliente trovato". Cancellando il testo (X) si ripristina la lista completa con ordine e sezioni originali (Da visitare / Gestiti + riepilogo).
+- Le azioni rapide (Sospeso, Ordine, Incassato, Rimandata, Nota) e l'indicatore 🔴 restano disponibili sui risultati (stessa ClientRow). Nessuna modifica a ordine/posizioni/giri/logica visite. Funziona su mobile e web.
+
 ## Import (2026-09-20) — "clienti menu.xlsx"
 - Import anagrafica da file (141 righe → 121 unici, 20 duplicati interni ignorati). Dedup per Partita IVA/CF/ragione sociale.
 - 97 già presenti (match per P.IVA) → invariati. 22 nuovi creati e assegnati al giro via Descrizione Zona (Catanzaro e Limitrofi 8, Altilia 6, Guardavalle 4, Crotone 3, Sila Piccola 1), aggiunti IN FONDO al giro (ordine esistente invariato, verificato 0 modifiche alle posizioni). 2 "da verificare" (zona MONTEPAONE LIDO) creati senza giro.
