@@ -52,9 +52,19 @@ PAYMENT_MODES = {
 }
 PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "agente_30", "agente_60", "agente_90"]
 
-app = FastAPI(title="AgendaVisite API")
+app = FastAPI(title="Rodomisto Rappresentanze API")
 api = APIRouter(prefix="/api")
 bearer = HTTPBearer(auto_error=False)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@api.get("/health")
+async def api_health():
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

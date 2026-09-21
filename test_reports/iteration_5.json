@@ -1,0 +1,35 @@
+{
+  "summary": "Pre-deployment verification for Rodomisto Rappresentanze after adding GET /health top-level. Backend: 15/15 new focused pytest cases PASSED (/health, auth for umberto & andrea, /api/auth/me role, giri invariance, andrea sees only own clients, recurrences 2 aziende + order/undo, /api/payment-modes = 7, POST /events order with agente_60 -> due_at = created_at+60d and payment_mode_label, anticipato & contrassegno -> due_at None, sospeso manual + collection clears same-company, overdue deferred order auto-generates suspension exposed in /api/clients). Full backend suite 91/91 green. Frontend (mobile 390x844): giro search on Dashboard works end-to-end — filters dynamically by ragione_sociale or comune, shows 'RISULTATI' section with count, shows 'Nessun cliente trovato' when no match, X button clears and restores full list with working quick-actions. IMPORTANT PROBE NOTE: GET /health returns 200 {'status':'ok'} when hit directly on the backend pod (localhost:8001), but through the public Kubernetes ingress non-/api paths are routed to the Expo frontend so https://<host>/health returns the frontend HTML (200). This is fine for a Kubernetes liveness/readiness probe (targets pod:8001 directly). If the deployment probe is instead configured against the public URL, /health at the ingress will not reach the backend. No product regressions detected. Deprecated RN-web style warnings unchanged from prior iterations.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — pre-existing, unchanged since iteration 1."},
+      {"component": "styles (various)", "issue": "RN Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' — pre-existing, unchanged since iteration 1."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_predeploy_health_and_regression.py",
+    "/app/test_reports/pytest/pytest_iter5.xml"
+  ],
+  "action_items": [
+    "Confirm the Kubernetes livenessProbe/readinessProbe targets the backend pod directly on port 8001 (not the public https://<host>/health, which the ingress routes to the frontend). If the probe is at the ingress, either (a) route /health to the backend service via ingress rules, or (b) expose /api/health additionally so the existing /api ingress rule handles it.",
+    "(Optional, low priority) Migrate RN Web deprecated style props: shadow* -> boxShadow, props.pointerEvents -> style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "server.py: GET /health is correctly declared on the top-level FastAPI `app` before the `/api` APIRouter is included; returns {'status':'ok'} with 200. No other logic changed.",
+    "Ingress note: the review request asks GET /health (no /api prefix) to respond 200. This works at the pod level but not through the current public ingress because non-/api paths are forwarded to the frontend. Deployment probe wiring needs to be aligned.",
+    "frontend/app/(tabs)/index.tsx: giro search uses Unicode-aware normalization (NFD + diacritic strip + toLowerCase) matching on both ragione_sociale and citta; empty-state footer + X-clear button are correctly wired to giro-search-clear testID."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_predeploy_health_and_regression.py (new — 15 pytest cases)"
+  ],
+  "success_rate": {"backend": "100% (15/15 focused, 91/91 full suite)", "frontend": "100% of Dashboard giro-search flow (typing filters, empty state, clear, quick-actions)"},
+  "seed_data_creation": "Tests create transient events (order, suspension, collection, past-due order via mongosh direct-insert) on real clients and soft-delete every created event id via mongosh in the final cleanup step. No residual TEST_ clients were created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Focused pre-deploy test file: /app/backend/tests/test_predeploy_health_and_regression.py — reuses conftest fixtures (umberto_headers/andrea_headers). It relies on mongosh being on PATH (present at /usr/bin/mongosh) for (a) forcing a past-due order to test auto-suspension and (b) soft-delete cleanup. Frontend testIDs used on Dashboard: select-giro-card, giro-search, giro-search-clear, client-row-<id>, client-actions-<id>. Live public URL: https://route-manager-126.preview.emergentagent.com (env EXPO_PUBLIC_BACKEND_URL). Credentials in /app/memory/test_credentials.md.",
+  "rca_of_issue": "N/A — no product bug. The initial single test failure (test_overdue_deferred_order_auto_suspension) was a test-isolation issue: the previous test in the same run created a collection for company X at 'now', which correctly settled the past-due auto-suspension inserted afterwards for the same company. Fixed by using a different company (companies[1]) for the auto-suspension test. This actually confirms the collection-clears-suspension logic in server.py::_active_suspensions_for is working as designed."
+}
