@@ -54,7 +54,7 @@ export default function LoginScreen() {
             style={StyleSheet.absoluteFill}
           />
           <View style={[styles.brandBadge, { top: insets.top + spacing.lg }]}>
-            <AppText weight="bold" style={styles.brandText}>Agenda Visite</AppText>
+            <AppText weight="bold" style={styles.brandText}>Rodomisto Rappresentanze</AppText>
           </View>
         </View>
 
@@ -117,8 +117,8 @@ function useThemedStyles() {
     root: { flex: 1, backgroundColor: colors.surface },
     heroWrap: { height: 300, width: "100%" },
     hero: { width: "100%", height: "100%" },
-    brandBadge: { position: "absolute", left: spacing.lg },
-    brandText: { fontSize: 20, color: colors.brand, fontFamily: fonts.bold },
+    brandBadge: { position: "absolute", left: spacing.lg, right: spacing.lg },
+    brandText: { fontSize: 18, color: colors.brand, fontFamily: fonts.bold },
     form: { paddingHorizontal: spacing.lg, marginTop: -spacing.xl, gap: spacing.md },
     title: { fontSize: 28, color: colors.onSurface, fontFamily: fonts.bold },
     sub: { fontSize: 15, color: colors.muted, marginBottom: spacing.sm },

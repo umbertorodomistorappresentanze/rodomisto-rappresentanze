@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Rodomisto Rappresentanze",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,7 +21,9 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "Rodomisto Rappresentanze",
+      "shortName": "Rodomisto"
     },
     "plugins": [
       "expo-router",
