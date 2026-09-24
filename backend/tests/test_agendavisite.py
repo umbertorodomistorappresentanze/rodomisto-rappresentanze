@@ -147,8 +147,8 @@ class TestClients:
         docs = r.json()
         assert isinstance(docs, list)
         for d in docs:
-            assert d["giro_id"] is None
-            assert d["agent"] == "umberto"
+            # da-verificare = senza giro OPPURE flaggato needs_review
+            assert d["giro_id"] is None or (d.get("extra") or {}).get("needs_review") is True
 
     def test_data_isolation(self, api, umberto_headers, andrea_headers):
         giri = api.get(f"{BASE_URL}/api/giri", headers=umberto_headers).json()

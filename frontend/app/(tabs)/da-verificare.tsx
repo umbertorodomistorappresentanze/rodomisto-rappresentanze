@@ -38,19 +38,26 @@ export default function DaVerificare() {
           renderItem={({ item }) => (
             <Pressable
               testID={`verify-row-${item.id}`}
-              onPress={() => router.push(`/client/${item.id}`)}
+              onPress={() => router.push(`/verify-assign/${item.id}`)}
               style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
             >
               <View style={{ flex: 1, gap: 3 }}>
-                <AppText weight="semibold" style={styles.name} numberOfLines={1}>{item.ragione_sociale}</AppText>
+                <AppText weight="semibold" style={styles.name} numberOfLines={2}>{item.ragione_sociale}</AppText>
                 <View style={styles.metaRow}>
                   <MapPin size={13} color={colors.muted} weight="bold" />
                   <AppText style={styles.meta} numberOfLines={1}>
                     {item.citta}{item.zona ? ` · Zona ${item.zona}` : ""}
                   </AppText>
                 </View>
+                {item.indirizzo ? (
+                  <AppText style={styles.meta2} numberOfLines={1}>{item.indirizzo}</AppText>
+                ) : null}
+                <AppText style={styles.meta2}>Agente: {item.agent === "andrea" ? "Andrea" : "Umberto"}</AppText>
               </View>
-              <CaretRight size={20} color={colors.muted} weight="bold" />
+              <View style={styles.assignBadge}>
+                <AppText weight="semibold" style={styles.assignBadgeText}>Assegna</AppText>
+                <CaretRight size={16} color={colors.onBrand} weight="bold" />
+              </View>
             </Pressable>
           )}
           ListEmptyComponent={
@@ -86,6 +93,12 @@ const useStyles = makeStyles((c) => ({
   name: { fontSize: 16, color: c.onSurface },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   meta: { fontSize: 13, color: c.muted },
+  meta2: { fontSize: 12, color: c.onSurfaceTertiary },
+  assignBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: c.brand, borderRadius: radius.pill, paddingHorizontal: spacing.md, height: 36,
+  },
+  assignBadgeText: { fontSize: 13, color: c.onBrand },
   fab: {
     position: "absolute", right: spacing.lg, width: 58, height: 58, borderRadius: radius.pill,
     backgroundColor: c.brand, alignItems: "center", justifyContent: "center",

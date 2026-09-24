@@ -18,7 +18,8 @@ import time
 import requests
 from datetime import datetime, timedelta, timezone
 
-BASE_URL = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL",
+                          "https://route-manager-126.preview.emergentagent.com").rstrip("/")
 
 LOCAL_BACKEND = "http://localhost:8001"
 
@@ -166,10 +167,10 @@ def test_payment_modes_seven(api, umberto_headers):
     r = api.get(f"{BASE_URL}/api/payment-modes", headers=umberto_headers)
     assert r.status_code == 200
     data = r.json()
-    assert len(data) == 7
+    assert len(data) == 8
     keys = [m["key"] for m in data]
     assert keys == ["anticipato", "contrassegno", "bonifico_30", "bonifico_60",
-                    "agente_30", "agente_60", "agente_90"]
+                    "agente_30", "agente_60", "agente_90", "rifatturazione_pac"]
     # anticipato / contrassegno -> days None
     dmap = {m["key"]: m for m in data}
     assert dmap["anticipato"]["days"] is None

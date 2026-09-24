@@ -49,8 +49,9 @@ PAYMENT_MODES = {
     "agente_30": {"label": "Pagamento mezzo Agente 30 giorni", "days": 30},
     "agente_60": {"label": "Pagamento mezzo Agente 60 giorni", "days": 60},
     "agente_90": {"label": "Pagamento mezzo Agente 90 giorni", "days": 90},
+    "rifatturazione_pac": {"label": "Rifatturazione Pac", "days": None},
 }
-PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "agente_30", "agente_60", "agente_90"]
+PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "agente_30", "agente_60", "agente_90", "rifatturazione_pac"]
 
 app = FastAPI(title="Rodomisto Rappresentanze API")
 api = APIRouter(prefix="/api")
@@ -682,9 +683,10 @@ async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)
 
 @api.get("/clients/da-verificare")
 async def da_verificare(user=Depends(get_current_user)):
-    docs = await db.clients.find(
-        {"giro_id": None, "agent": user["username"], "deleted_at": None}, {"_id": 0}
-    ).to_list(5000)
+    q = {"deleted_at": None, "$or": [{"giro_id": None}, {"extra.needs_review": True}]}
+    if user.get("role") != "admin":
+        q["agent"] = user["username"]
+    docs = await db.clients.find(q, {"_id": 0}).to_list(5000)
     docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
     return [client_public(d) for d in docs]
 
@@ -763,7 +765,10 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
     if "agent" in update:
         if user.get("role") != "admin" or update["agent"] not in VALID_AGENTS:
             update.pop("agent", None)
-    await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": update})
+    set_doc = dict(update)
+    if update.get("giro_id"):
+        set_doc["extra.needs_review"] = False
+    await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": set_doc})
     doc = await db.clients.find_one({"id": client_id}, {"_id": 0})
     return client_public(doc)
 
@@ -1091,10 +1096,15 @@ async def add_recurrence_member(company: str, body: RecurrenceMemberCreate, user
 
 
 @api.delete("/recurrences/{company}/members/{member_id}")
-async def remove_recurrence_member(company: str, member_id: str, user=Depends(require_admin)):
-    res = await db.recurrence_members.delete_one({"id": member_id, "company": company})
-    if res.deleted_count == 0:
+async def remove_recurrence_member(company: str, member_id: str, user=Depends(get_current_user)):
+    member = await db.recurrence_members.find_one({"id": member_id, "company": company}, {"_id": 0})
+    if not member:
         raise HTTPException(status_code=404, detail="Voce non trovata")
+    if user.get("role") != "admin":
+        cli = await db.clients.find_one({"id": member["client_id"]}, {"_id": 0})
+        if not cli or cli.get("agent") != user["username"]:
+            raise HTTPException(status_code=403, detail="Non puoi rimuovere questo cliente")
+    await db.recurrence_members.delete_one({"id": member_id, "company": company})
     return {"ok": True}
 
 

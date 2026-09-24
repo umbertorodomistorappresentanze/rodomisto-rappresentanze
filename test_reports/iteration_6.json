@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 6 verified the new Rodomisto Rappresentanze flows end-to-end. Backend: 12/12 focused pytest cases PASSED in /app/backend/tests/test_iter6_new_flows.py (payment mode 'rifatturazione_pac' present with days=null and order event has due_at=null + no suspension, bonfissuto Catanzaro verso Lamezia Terme contains Eurodrink & NOT Excalibur for natale+pasqua, DELETE /api/recurrences/bonfissuto/members/{id} removes only from that ricorrenza while client stays in anagrafica + giro + mazzetti, agente Andrea gets 403 removing a non-owned member, GET /api/giri returns exactly the 7 giri in the new order, /api/clients/da-verificare returns 12 clients with all required fields, PUT /api/clients/{id} with giro_id clears extra.needs_review and removes the client from /clients/da-verificare, regression login umberto+andrea OK and agente_60 order due_at = created_at + 60d). Full backend suite (91 tests) shows 4 pre-existing tests failing that are STALE and expected to fail after the data/spec updates (Excalibur removed from bonfissuto changes the per-group totals, 8th payment mode rifatturazione_pac added, da_verificare count changed) — these are TEST fixture updates, not product bugs. Frontend (mobile 390x844, Expo web preview): (a) 'Da Verificare' tab shows 12 rows with 'Assegna' badge, tapping opens Conferma/Assegna modal showing client info + all 7 giri in the exact expected order + 'Conferma e assegna al giro' + 'Lascia da verificare' buttons; (b) Ricorrenze -> Bonfissuto shows real-time search field, 'Eurodrink' filter shows Eurodrink under 'CATANZARO VERSO LAMEZIA TERME', 'Excalibur' filter shows 'Nessun cliente trovato' (confirming removal end-to-end), clear (X) works, and 12 trash 'Rimuovi dalla ricorrenza' icons render on member rows; (c) Dashboard giro shows the 7 giri in exact expected order in the selection modal, and inside the Ordine effettuato flow the 'Modalità di pagamento' sheet exposes all 8 modes including 'Rifatturazione Pac' as a selectable option. Pre-existing RN-web deprecation warnings only (shadow* -> boxShadow, props.pointerEvents), no red screen, no runtime errors. Cleanup performed: soft-deleted TEST_ clients (6) and TEST_ events after the assign flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "backend/tests/test_agendavisite.py::TestClients::test_da_verificare", "issue": "Stale expected count/list — new spec surfaces different set of da-verificare clients. Update fixture."},
+      {"endpoint": "backend/tests/test_recurrences.py::TestRecurrenceMembers::test_bonfissuto_totals_pasqua_and_natale", "issue": "Stale group totals — Excalibur removed and Eurodrink added in 'Catanzaro verso Lamezia Terme'. Update expected counts (e.g. 'Catanzaro verso Crotone' delta and Lamezia group)."},
+      {"endpoint": "backend/tests/test_recurrences.py::TestOrderFlow::test_independence_company_and_period", "issue": "Cross-test bleed: the test asserts mazzetti/natale is 'da_gestire' for a client that another test already ordered on. Fixtures should isolate per test (unique client) or reset the ordered status in teardown."},
+      {"endpoint": "backend/tests/test_sospesi.py::TestPaymentModes::test_seven_modes_correct_days", "issue": "Payment modes count is now 8 (added 'rifatturazione_pac' with days=null). Update the assertion from 7 to 8 and include the new mode."},
+      {"endpoint": "backend/tests/test_predeploy_health_and_regression.py", "issue": "Errors on setup with KeyError: 'EXPO_PUBLIC_BACKEND_URL' when env var is not exported. Use os.environ.get with a fallback like conftest.py."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — pre-existing, unchanged."},
+      {"component": "styles (various)", "issue": "RN Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' — pre-existing, unchanged."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_new_flows.py",
+    "/app/test_reports/pytest/pytest_iter6.xml"
+  ],
+  "action_items": [
+    "Refresh the four stale pre-existing test assertions to reflect the new spec: (a) update /backend/tests/test_agendavisite.py::test_da_verificare expected count/list; (b) update /backend/tests/test_recurrences.py bonfissuto group totals (Excalibur removed, Eurodrink added in 'Catanzaro verso Lamezia Terme'); (c) fix cross-test bleed in test_independence_company_and_period by using a dedicated client or resetting the ordered status in teardown; (d) bump the payment modes assertion from 7 to 8 in test_sospesi.py and include 'rifatturazione_pac' with days=null.",
+    "In /app/backend/tests/test_predeploy_health_and_regression.py, use os.environ.get with a default (or import from conftest) to avoid KeyError when EXPO_PUBLIC_BACKEND_URL is not exported to the pytest process.",
+    "(Optional, low priority) Align /app/backend/seed_data.py GIRI array to the new persisted order (currently DB has the new order but seed_data still has the old one; harmless because seed runs only once, but keeps code and data consistent for fresh deployments)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L44-54: 'rifatturazione_pac' correctly added to PAYMENT_MODES with days=None and appended last to PAYMENT_MODE_ORDER — /api/payment-modes now returns 8 entries.",
+    "server.py L684-691: /api/clients/da-verificare filter is deleted_at=None AND (giro_id is None OR extra.needs_review=True), with agent restriction for non-admin. Correct.",
+    "server.py L768-771: PUT /clients/{id} correctly clears extra.needs_review=False whenever a giro_id is supplied — validated in backend + frontend that the record disappears from da-verificare afterwards.",
+    "server.py L1098-1108: DELETE /api/recurrences/{company}/members/{id} performs ownership check (admin or same-agent) and delete_one only affects the recurrence_members collection — anagrafica/giri/other ricorrenze are untouched (verified with Eurodrink test).",
+    "frontend/app/verify-assign/[id].tsx: giri list is sorted by g.order ascending, so the modal shows the persisted new order (verified 7 giri in correct order).",
+    "frontend/app/ricorrenza/[company].tsx: search + Trash 'Rimuovi dalla ricorrenza' both wired with an Alert confirmation; testIDs 'ric-search', 'ric-search-clear', 'ric-remove-<id>' all present."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter6_new_flows.py (new — 12 focused pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 iter6 focused). Full suite 84/88 excluding the 4 stale assertions above (which are test-fixture debt, not product bugs).",
+    "frontend": "100% of the 3 flows in scope: Da Verificare list + Conferma/Assegna modal, Ricorrenze Bonfissuto search + remove UI, Dashboard payment-mode sheet with Rifatturazione Pac."
+  },
+  "seed_data_creation": "Created and cleaned up a single TEST_daverificare_* client per assign flow test and TEST_-tagged events; all soft-deleted post-run (mongosh: TEST_ clients modified = 6, TEST_ events modified = 0 residuals). No real da-verificare clients were persistently assigned. Eurodrink was removed and re-added to bonfissuto/Catanzaro verso Lamezia Terme within the same test to keep state intact.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New iter6 backend file: /app/backend/tests/test_iter6_new_flows.py (reuses conftest fixtures umberto_headers/andrea_headers). Base URL from EXPO_PUBLIC_BACKEND_URL (fallback to https://route-manager-126.preview.emergentagent.com). Expected 7-giri order constant: EXPECTED_GIRI_ORDER. Frontend testIDs used: tab bar (text 'Da Verificare','Ricorrenze','Oggi'), verify-row-<id>, assign-close, assign-giro-<id>, assign-confirm, assign-later, ric-search, ric-search-clear, ric-remove-<id>, ric-back, select-giro-card, client-actions-<id>. Credentials in /app/memory/test_credentials.md.",
+  "rca_of_issue": "N/A — no product bug. The 4 pre-existing failing tests are test-fixture debt after the intentional data/spec changes (Excalibur removed, Eurodrink added, giri reordered, 8th payment mode). Provide the fixture updates listed in action_items."
+}

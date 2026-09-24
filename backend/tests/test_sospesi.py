@@ -66,7 +66,7 @@ class TestPaymentModes:
         r = api.get(f"{BASE_URL}/api/payment-modes", headers=umberto_headers)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert isinstance(data, list) and len(data) == 7
+        assert isinstance(data, list) and len(data) == 8
         expected = [
             ("anticipato", None),
             ("contrassegno", None),
@@ -75,6 +75,7 @@ class TestPaymentModes:
             ("agente_30", 30),
             ("agente_60", 60),
             ("agente_90", 90),
+            ("rifatturazione_pac", None),
         ]
         got = [(m["key"], m["days"]) for m in data]
         assert got == expected, got

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Pressable, SectionList, View } from "react-native";
+import { Alert, Pressable, SectionList, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowCounterClockwise, CaretLeft, CheckCircle, Plus } from "phosphor-react-native";
+import { ArrowCounterClockwise, CaretLeft, CheckCircle, MagnifyingGlass, Plus, Trash, X } from "phosphor-react-native";
 
-import { apiGet, apiPost, RecurrenceClient, RecurrenceDef, RecurrenceMembers } from "@/src/api";
+import { apiDelete, apiGet, apiPost, RecurrenceClient, RecurrenceDef, RecurrenceMembers } from "@/src/api";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -32,6 +32,7 @@ export default function RicorrenzaDetail() {
   const [periodKey, setPeriodKey] = useState<string | null>(null);
   const activePeriod = periodKey ?? periods[0]?.key ?? null;
   const [filter, setFilter] = useState<"da_gestire" | "ordine_effettuato">("da_gestire");
+  const [search, setSearch] = useState("");
 
   const membersQuery = useQuery({
     queryKey: ["recurrence-members", company, activePeriod],
@@ -57,19 +58,44 @@ export default function RicorrenzaDetail() {
     onError: (e: any) => toast(e?.detail || "Errore", "error"),
   });
 
+  const removeMember = useMutation({
+    mutationFn: (member_id: string) => apiDelete(`/recurrences/${company}/members/${member_id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurrence-members", company, activePeriod] });
+      toast("Cliente rimosso dalla ricorrenza", "success");
+    },
+    onError: (e: any) => toast(e?.detail || "Errore", "error"),
+  });
+
+  const confirmRemove = (item: RecurrenceClient) => {
+    Alert.alert(
+      "Rimuovi dalla ricorrenza",
+      `Vuoi rimuovere ${item.ragione_sociale} dalla ricorrenza? Il cliente resta in anagrafica, nei giri territoriali e nelle altre ricorrenze.`,
+      [
+        { text: "Annulla", style: "cancel" },
+        { text: "Rimuovi", style: "destructive", onPress: () => removeMember.mutate(item.member_id) },
+      ]
+    );
+  };
+
   const { sections, daGestireCount, effettuatiCount } = useMemo(() => {
     const groups = membersQuery.data?.groups ?? [];
+    const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const q = norm(search.trim());
     let da = 0;
     let done = 0;
     const secs: { title: string; data: RecurrenceClient[] }[] = [];
     for (const g of groups) {
-      const filtered = g.clients.filter((c) => c.recurrence_status === filter);
+      let filtered = g.clients.filter((c) => c.recurrence_status === filter);
+      if (q) filtered = filtered.filter((c) => norm(c.ragione_sociale).includes(q) || norm(c.citta).includes(q));
       da += g.clients.filter((c) => c.recurrence_status === "da_gestire").length;
       done += g.clients.filter((c) => c.recurrence_status === "ordine_effettuato").length;
       if (filtered.length > 0) secs.push({ title: g.group, data: filtered });
     }
     return { sections: secs, daGestireCount: da, effettuatiCount: done };
-  }, [membersQuery.data, filter]);
+  }, [membersQuery.data, filter, search]);
+
+  const searching = search.trim().length > 0;
 
   if (defsQuery.isLoading || !rdef) return <Loading />;
 
@@ -129,6 +155,25 @@ export default function RicorrenzaDetail() {
             </AppText>
           </Pressable>
         </View>
+
+        <View style={styles.searchField}>
+          <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
+          <TextInput
+            testID="ric-search"
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Cerca cliente per nome o comune…"
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searching ? (
+            <Pressable testID="ric-search-clear" onPress={() => setSearch("")} hitSlop={8}>
+              <X size={18} color={colors.muted} weight="bold" />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       {membersQuery.isLoading ? (
@@ -149,6 +194,14 @@ export default function RicorrenzaDetail() {
           )}
           renderItem={({ item }) => (
             <View style={styles.card}>
+              <Pressable
+                testID={`ric-remove-${item.id}`}
+                onPress={() => confirmRemove(item)}
+                hitSlop={6}
+                style={styles.removeBtn}
+              >
+                <Trash size={18} color={colors.error} weight="bold" />
+              </Pressable>
               <View style={{ flex: 1 }}>
                 <AppText weight="semibold" style={styles.cName} numberOfLines={2}>{item.ragione_sociale}</AppText>
                 <AppText style={styles.cMeta} numberOfLines={1}>
@@ -187,7 +240,9 @@ export default function RicorrenzaDetail() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <AppText style={styles.emptyText}>
-                {filter === "da_gestire" ? "Nessun cliente da gestire." : "Nessun ordine effettuato."}
+                {searching
+                  ? "Nessun cliente trovato"
+                  : filter === "da_gestire" ? "Nessun cliente da gestire." : "Nessun ordine effettuato."}
               </AppText>
             </View>
           }
@@ -224,6 +279,13 @@ const useStyles = makeStyles((c) => ({
   chipOn: { backgroundColor: c.brand },
   chipText: { fontSize: 13, color: c.onSurfaceSecondary },
   chipTextOn: { color: c.onBrand },
+  searchField: {
+    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,
+    borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44,
+  },
+  searchInput: { flex: 1, fontFamily: "PlusJakarta-Medium", fontSize: 15, color: c.onSurface, paddingVertical: 0 },
+  removeBtn: { width: 34, height: 34, borderRadius: radius.sm, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: c.surfaceSecondary, paddingVertical: spacing.sm },
   sectionTitle: { fontSize: 12, color: c.onSurfaceTertiary, letterSpacing: 0.5 },
   countBadge: { minWidth: 24, paddingHorizontal: 6, height: 20, borderRadius: radius.pill, backgroundColor: c.brandSecondary, alignItems: "center", justifyContent: "center" },

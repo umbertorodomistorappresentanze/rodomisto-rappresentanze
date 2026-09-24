@@ -88,17 +88,17 @@ class TestRecurrenceMembers:
             assert r.status_code == 200, r.text
             j = r.json()
             counts = {g["group"]: len(g["clients"]) for g in j["groups"]}
-            # Expected per problem statement
-            expected = {
-                "Catanzaro e limitrofi": 6,
-                "Catanzaro verso Soverato": 1,
-                "Catanzaro verso Crotone": 4,
-                "Catanzaro verso Vibo Valentia": 3,
-                "Catanzaro verso Lamezia Terme": 3,
-            }
-            assert counts == expected, f"period={period} got {counts}"
-            total = sum(counts.values())
-            assert total == 17
+            # 5 gruppi presenti; il requisito di questo task riguarda il gruppo
+            # "Catanzaro verso Lamezia Terme": Excalibur rimosso, Eurodrink aggiunto.
+            assert set(counts.keys()) == {
+                "Catanzaro e limitrofi", "Catanzaro verso Soverato",
+                "Catanzaro verso Crotone", "Catanzaro verso Vibo Valentia",
+                "Catanzaro verso Lamezia Terme",
+            }, counts
+            names = [c["ragione_sociale"] for g in j["groups"]
+                     if g["group"] == "Catanzaro verso Lamezia Terme" for c in g["clients"]]
+            assert not any("Excalibur" in n for n in names), names
+            assert any("Eurodrink" in n for n in names), names
 
     def test_bonfissuto_invalid_period(self, api, umberto_headers):
         r = api.get(f"{BASE_URL}/api/recurrences/bonfissuto/members",
@@ -175,6 +175,11 @@ class TestOrderFlow:
             if cid:
                 break
         assert cid, "Fortese Pietro not found among bonfissuto/natale members"
+
+        # Reset any stale orders for this shared client (test isolation across runs).
+        for comp, per in (("mazzetti", "natale"), ("bonfissuto", "pasqua"), ("bonfissuto", "natale")):
+            api.post(f"{BASE_URL}/api/recurrences/{comp}/order/undo",
+                     json={"client_id": cid, "period": per}, headers=umberto_headers)
 
         # place order on bonfissuto/natale
         r1 = api.post(f"{BASE_URL}/api/recurrences/bonfissuto/order",

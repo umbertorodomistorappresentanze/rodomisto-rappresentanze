@@ -22,6 +22,13 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - DA VISITARE = mai visitato o >=21 giorni dall'ultima visita completata, e non gestito oggi, e non rinviato a data futura. Altrimenti GIÀ VISITATI/GESTITI.
 - VISITATO aggiorna last_visit_at (anche senza ordine). VISITA RIMANDATA non tocca last_visit_at (setta snoozed_until 3/7/15/30 gg o data). Ordine registra solo azienda. Più ordini/giorno consentiti.
 
+## Implemented (2026-09-24) — Ricorrenze, Da Verificare, ordine giri, pagamento
+- RICORRENZE: nel gruppo bonfissuto "Catanzaro verso Lamezia Terme" rimosso Excalibur e aggiunto Eurodrink (solo ricorrenza; anagrafica/giri/altre ricorrenze invariati). Barra di ricerca (nome/comune, realtime, "Nessun cliente trovato", clear) in ricorrenza/[company].tsx. Azione "Rimuovi dalla ricorrenza" con Alert di conferma (DELETE member; permesso admin o agente proprietario).
+- DA VERIFICARE: endpoint /clients/da-verificare ora ritorna clienti con giro_id None OPPURE extra.needs_review True (admin vede tutti gli agenti). Schermata con più info (comune, indirizzo, zona, agente) + modal verify-assign/[id] (scelta tra i 7 giri, "Conferma e assegna" append in fondo + azzera needs_review, oppure "Lascia da verificare").
+- GIRI TERRITORIALI: nuovo ordine di visualizzazione (Catanzaro e Limitrofi, Guardavalle, Lamezia→Vibo, Vibo→Ricadi, Altilia, Crotone, Sila Piccola) via campo order nel DB. Ricerca cliente nel giro già presente (Dashboard).
+- PAGAMENTO: nuova modalità "Rifatturazione Pac" (days=None → nessuna scadenza/promemoria/sospeso). Altre modalità invariate.
+- Verificato: testing_agent 12/12 nuovi flussi + suite completa 103 test verdi. Test obsoleti aggiornati.
+
 ## Implemented (2026-09-21) — PWA responsive + web
 - app.json web: display "standalone", themeColor #047857, backgroundColor #FFFFFF, name/shortName "Rodomisto Rappresentanze"/"Rodomisto", lang it, description → manifest PWA + add-to-home + fullscreen standalone (attivi nell'export web/deploy).
 - `document.title` = "Rodomisto Rappresentanze" (titolo scheda browser) via effect web in _layout.

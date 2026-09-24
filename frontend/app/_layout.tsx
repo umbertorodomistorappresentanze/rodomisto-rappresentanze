@@ -55,6 +55,7 @@ export default function RootLayout() {
                       <Stack.Screen name="client/new" options={{ presentation: "modal" }} />
                       <Stack.Screen name="client/edit/[id]" options={{ presentation: "modal" }} />
                       <Stack.Screen name="ricorrenza/add/[company]" options={{ presentation: "modal" }} />
+                      <Stack.Screen name="verify-assign/[id]" options={{ presentation: "modal" }} />
                     </Stack>
                     </WebFrame>
                   </ToastProvider>
