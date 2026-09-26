@@ -151,7 +151,7 @@ export default function RicorrenzaDetail() {
             style={[styles.chip, filter === "ordine_effettuato" && styles.chipOn]}
           >
             <AppText weight="semibold" style={[styles.chipText, filter === "ordine_effettuato" && styles.chipTextOn]}>
-              Effettuati ({effettuatiCount})
+              Gestiti ({effettuatiCount})
             </AppText>
           </Pressable>
         </View>

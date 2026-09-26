@@ -881,6 +881,66 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# Activities feed (Ultimi aggiornamenti / Storico) — read only
+# ---------------------------------------------------------------------------
+ACTIVITY_TYPES = ["order", "collection", "suspension", "reschedule"]
+ACTIVITY_TYPE_LABELS = {
+    "order": "Ordine effettuato",
+    "collection": "Incassato",
+    "suspension": "+Sospeso",
+    "reschedule": "Visita rimandata",
+}
+
+
+@api.get("/activities")
+async def list_activities(
+    scope: str = Query("all"),  # all | umberto | andrea
+    type: str = Query("all"),   # all | order | collection | suspension | reschedule
+    limit: int = Query(200),
+    user=Depends(get_current_user),
+):
+    is_admin = user.get("role") == "admin"
+    q = {"deleted_at": None, "type": {"$in": ACTIVITY_TYPES}}
+    if type != "all" and type in ACTIVITY_TYPES:
+        q["type"] = type
+    # Permissions: agents only ever see their own activities regardless of scope.
+    if not is_admin:
+        q["agent"] = user["username"]
+    elif scope in VALID_AGENTS:
+        q["agent"] = scope
+    lim = max(1, min(limit, 500))
+    events = await db.events.find(q, {"_id": 0}).sort("created_at", -1).limit(lim).to_list(lim)
+
+    client_ids = list({e["client_id"] for e in events})
+    clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0}).to_list(20000)
+    cmap = {c["id"]: c for c in clients}
+    giri = await db.giri.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    gmap = {g["id"]: g["name"] for g in giri}
+
+    out = []
+    for e in events:
+        cli = cmap.get(e["client_id"], {})
+        giro_name = gmap.get(cli.get("giro_id")) if cli else None
+        if e["type"] in ("order", "collection", "suspension"):
+            context = e.get("company_name") or ""
+        else:
+            context = giro_name or (cli.get("citta") if cli else "") or ""
+        out.append({
+            "id": e["id"],
+            "type": e["type"],
+            "type_label": ACTIVITY_TYPE_LABELS.get(e["type"], e["type"]),
+            "created_at": iso(e.get("created_at")),
+            "agent": e.get("agent"),
+            "client_ragione_sociale": cli.get("ragione_sociale", "") if cli else "",
+            "context": context,
+            "giro_name": giro_name,
+            "citta": cli.get("citta", "") if cli else "",
+            "company_name": e.get("company_name"),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Recurrences (Ricorrenze) — separate from territorial giri
 # ---------------------------------------------------------------------------
 class RecurrenceOrderBody(BaseModel):

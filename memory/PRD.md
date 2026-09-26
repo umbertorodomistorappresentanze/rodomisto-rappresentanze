@@ -1,5 +1,14 @@
 # AgendaVisite — PRD
 
+## Implemented (2026-09-26) — Ultimi aggiornamenti, Storico, Gestiti, dicitura ricorrenze
+- HOME "ULTIMI AGGIORNAMENTI": nuovo riquadro (src/components/updates-panel.tsx) con le ultime attività (solo order/collection/suspension/reschedule), data leggibile senza orario ("Sab 26/09"). Filtro Tutti/Umberto/Andrea mostrato solo all'admin; agent vede sempre e solo le proprie (enforced backend). Link "Vedi tutti" → /storico.
+- HOME "ULTIMO AGGIORNAMENTO": card con data estesa ("Giovedì 24 settembre 2026") + ultima attività; per admin sempre scope=all (proprie + Andrea), per agent solo le proprie.
+- STORICO (/app/frontend/app/storico.tsx): elenco cronologico con filtro tipo (Tutte/Ordini/Incassi/Sospesi/Visite rimandate) e filtro utente (solo admin).
+- GIRI "Gestiti": il numero "Gestiti" del riepilogo giro in home è cliccabile → /gestiti/[id] che mostra SOLO le ragioni sociali dei clienti già gestiti in quel giro. Nessuna modifica a ordine/assegnazioni/logica visite.
+- RICORRENZE: rinominata solo la dicitura chip "Effettuati" → "Gestiti" (funzione invariata).
+- Backend: unico endpoint read-only GET /api/activities?scope=&type=&limit= (join clienti+giri; context = azienda per order/collection/suspension, giro per reschedule). Permessi: admin per scope, agent forzato ai propri. Nessuna modifica a logiche esistenti.
+- Verificato: 13/13 test backend dedicati (tests/test_activities_feed.py) + flussi frontend (testing_agent). 2 fallimenti pytest pre-esistenti su dati storici NON causati da queste modifiche.
+
 ## Problem statement
 Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agenti (Umberto Rodomisto, Andrea Azzarito). NON è un CRM e NON gestisce dettagli/importi degli ordini. Registra: visite, ordini per azienda (solo azienda), incassi, rinvii, note. Ottimizzata per smartphone, pulsanti grandi, minimo numero di tocchi.
 

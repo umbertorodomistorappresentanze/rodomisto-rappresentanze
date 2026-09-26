@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 7 verified the 5 new 'Rodomisto Rappresentanze' flows around the new read-only GET /api/activities feed and its consumers (Home 'ULTIMO AGGIORNAMENTO' + 'ULTIMI AGGIORNAMENTI' + Vedi tutti → /storico, giro Gestiti click → /gestiti/[id], and Ricorrenze detail 'Gestiti' label). Backend: 13/13 new pytest cases PASSED in /app/backend/tests/test_activities_feed.py — endpoint returns only the 4 allowed types (order/collection/suspension/reschedule) with all required fields (id, type, type_label, created_at, agent, client_ragione_sociale, context), sorted DESC by created_at, capped at 500, type filter correctly narrows results, admin scope=all|umberto|andrea works as spec, and agent Andrea with scope=all or scope=umberto ONLY sees her own activities (no leak from Umberto). Extra sanity via curl: order/collection/suspension have context=company_name (e.g. 'Librandi'), reschedule has context=giro_name (e.g. 'Catanzaro → Guardavalle'). Frontend (Expo web, mobile 390x844): (a) umberto home shows 'ULTIMO AGGIORNAMENTO' with long italian date + 'Ultima attività:' summary AND 'ULTIMI AGGIORNAMENTI' card with 6 rows and the Tutti/Umberto/Andrea chip filter with testIDs upd-filter-{all|umberto|andrea}; (b) 'Vedi tutti' (testID see-all-activities) opens /storico showing 'Storico attività' header, both chip rows sto-type-{all|order|collection|suspension|reschedule} + sto-scope-{all|umberto|andrea}, and toggling type=Ordini + scope=Andrea correctly renders 'Nessuna attività trovata.'; (c) selecting a giro (Catanzaro → Guardavalle) reveals the summary card whose 'Gestiti' item is a Pressable (testID giro-gestiti-btn) that navigates to /gestiti/{id} — the screen shows only ragione_sociale rows ('Azienda agricola Leonardo di Vatrano Elisabetta', '2M Gestioni Srl') with count '2 Gestiti' in header, no other client fields; (d) Ricorrenze → Bonfissuto detail correctly shows the chips 'Da gestire (12)' and 'Gestiti (4)' with ZERO occurrences of 'Effettuati' (rename complete); (e) andrea (agent) sees the home card WITHOUT the Tutti/Umberto/Andrea chips, /storico WITHOUT the scope chip row, and only her own activities are rendered, confirming the admin-gated UI. Pre-existing RN-web deprecation warnings only (shadow* → boxShadow, props.pointerEvents); no red screen and no runtime errors. Regression: existing full backend suite has the 4 stale-fixture failures documented in iteration 6 (Excalibur removed, Eurodrink added, 8th payment mode, giri reorder) — NOT caused by these changes and explicitly out-of-scope per E1.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — pre-existing, unchanged by this iteration."},
+      {"component": "styles (various)", "issue": "RN Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' — pre-existing, unchanged."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_activities_feed.py",
+    "/app/test_reports/pytest/pytest_iter7.xml"
+  ],
+  "action_items": [
+    "(Optional, pre-existing) Refresh the 4 stale test assertions from iteration 6 (test_agendavisite::test_da_verificare, test_recurrences bonfissuto totals, test_recurrences::test_independence_company_and_period cross-test bleed, test_sospesi 7→8 payment modes) — NOT caused by iteration 7 changes.",
+    "(Optional) Consider adding an explicit 400 on invalid ?scope= or ?type= values instead of silently falling back to 'all'."
+  ],
+  "critical_code_review_comments": [
+    "server.py L895-940 GET /api/activities: correct read-only implementation. Filters q={deleted_at:None, type:{$in:ACTIVITY_TYPES}}, applies type filter only if in whitelist (safe), non-admin is FORCED to q.agent=user.username BEFORE checking scope so agents can never see other users' feed regardless of ?scope=. Limit clamped to [1..500]. Excludes _id via projection. Efficient: single fetch of events + bulk fetch of clients/giri for join.",
+    "updates-panel.tsx L96-113: admin-only filter chips (isAdmin gate), 3 testIDs upd-filter-{all|umberto|andrea}; ActivityRow shows agent chip only when isAdmin && scope==='all' (matches spec).",
+    "storico.tsx: admin gate for scope chip row (L67-78), TYPE_OPTIONS labels match Italian spec (Tutte/Ordini/Incassi/Sospesi/Visite rimandate). Uses limit=500 which is exactly the server cap — OK.",
+    "gestiti/[id].tsx: renders ONLY ragione_sociale (L52-56), correct filter 'status !== da_visitare' (matches home section 'GIÀ VISITATI / GESTITI'), empty state text present.",
+    "index.tsx L185-196: 'Gestiti' summary item is a Pressable with testID='giro-gestiti-btn' that navigates to /gestiti/{activeGiroId}. Good.",
+    "ricorrenza/[company].tsx L154: chip label 'Gestiti ({effettuatiCount})' — variable name is still 'effettuatiCount' internally, only the label was changed. Cosmetic-only; consider renaming the variable to 'gestitiCount' for consistency (non-blocking)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_activities_feed.py (new — 13 focused pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 new tests on /api/activities). Full-suite pre-existing failures are the 4 iter6 stale fixtures documented earlier — unrelated to iteration 7.",
+    "frontend": "100% of the 5 flows in scope: Home ULTIMO AGGIORNAMENTO + ULTIMI AGGIORNAMENTI + admin filter, Vedi tutti → /storico with both chip rows, giro Gestiti click → /gestiti/[id] with only ragione sociale, Ricorrenze 'Gestiti' rename, agent Andrea admin-gated UI hidden."
+  },
+  "seed_data_creation": "No test data created; all tests read-only against existing seeded data. No cleanup needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New test file: /app/backend/tests/test_activities_feed.py (reuses conftest fixtures umberto_headers/andrea_headers, BASE_URL from EXPO_PUBLIC_BACKEND_URL with fallback). Endpoint under test: GET /api/activities?scope={all|umberto|andrea}&type={all|order|collection|suspension|reschedule}&limit=<=500. Response fields: id, type, type_label, created_at, agent, client_ragione_sociale, context, giro_name, citta, company_name. Context rule: order/collection/suspension → company_name; reschedule → giro_name (fallback citta). Frontend testIDs: upd-filter-{all|umberto|andrea} (admin only), see-all-activities, sto-type-{all|order|collection|suspension|reschedule}, sto-scope-{all|umberto|andrea} (admin only), storico-back, giro-gestiti-btn, gestiti-back. Credentials in /app/memory/test_credentials.md.",
+  "rca_of_issue": "N/A — no product bug found. Feature works as specified end-to-end."
+}

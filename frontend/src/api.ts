@@ -106,6 +106,20 @@ export type Client = {
   suspensions?: string[];
 };
 export type PaymentMode = { key: string; label: string; days: number | null };
+
+export type Activity = {
+  id: string;
+  type: "order" | "collection" | "suspension" | "reschedule";
+  type_label: string;
+  created_at: string;
+  agent: string | null;
+  client_ragione_sociale: string;
+  context: string;
+  giro_name: string | null;
+  citta: string;
+  company_name: string | null;
+};
+
 export type VisitEvent = {
   id: string;
   client_id: string;

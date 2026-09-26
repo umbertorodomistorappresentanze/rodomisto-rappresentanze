@@ -10,6 +10,7 @@ import { useAuth } from "@/src/auth";
 import { AppText, EmptyState, Loading } from "@/src/components/ui";
 import { ClientRow } from "@/src/components/client-row";
 import { QuickActionsRef, QuickActionsSheet } from "@/src/components/quick-actions-sheet";
+import { UpdatesPanel } from "@/src/components/updates-panel";
 import { useToast } from "@/src/components/toast";
 import { todayLong } from "@/src/format";
 import { useSelectedGiro } from "@/src/selected-giro";
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const toast = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { giroId, ready } = useSelectedGiro();
   const sheetRef = useRef<QuickActionsRef>(null);
   const [search, setSearch] = useState("");
@@ -70,10 +72,13 @@ export default function Dashboard() {
   function onActionSuccess(message: string) {
     toast(message, "success");
     qc.invalidateQueries({ queryKey: ["clients", activeGiroId] });
+    qc.invalidateQueries({ queryKey: ["activities"] });
   }
 
   const openActions = (c: Client) => sheetRef.current?.present(c);
   const openHistory = (c: Client) => router.push(`/client/${c.id}`);
+
+  const displaySections = !activeGiroId || clientsQuery.isLoading ? [] : sections;
 
   if (!ready) return <Loading />;
 
@@ -152,65 +157,82 @@ export default function Dashboard() {
         ) : null}
       </View>
 
-      {!activeGiroId ? (
-        <EmptyState
-          title="Nessun giro selezionato"
-          text="Inizia scegliendo il giro di oggi con il pulsante verde qui sopra."
-        />
-      ) : clientsQuery.isLoading ? (
-        <Loading />
-      ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          stickySectionHeadersEnabled
-          contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm }}
-          refreshControl={
-            <RefreshControl refreshing={clientsQuery.isFetching} onRefresh={() => clientsQuery.refetch()} tintColor={colors.brand} />
-          }
-          ListHeaderComponent={
-            !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
+      <SectionList
+        sections={displaySections}
+        keyExtractor={(item) => item.id}
+        stickySectionHeadersEnabled
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm }}
+        refreshControl={
+          <RefreshControl
+            refreshing={clientsQuery.isFetching}
+            onRefresh={() => {
+              if (activeGiroId) clientsQuery.refetch();
+              qc.invalidateQueries({ queryKey: ["activities"] });
+            }}
+            tintColor={colors.brand}
+          />
+        }
+        ListHeaderComponent={
+          <>
+            {!searching ? <UpdatesPanel isAdmin={isAdmin} /> : null}
+            {activeGiroId && !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
               <View style={styles.summaryCard}>
                 <View style={styles.summaryItem}>
                   <AppText weight="bold" style={styles.summaryNumber}>{sections[0].count}</AppText>
                   <AppText weight="medium" style={styles.summaryLabel}>Da visitare</AppText>
                 </View>
                 <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
+                <Pressable
+                  testID="giro-gestiti-btn"
+                  onPress={() => router.push(`/gestiti/${activeGiroId}`)}
+                  style={styles.summaryItem}
+                >
                   <AppText weight="bold" style={[styles.summaryNumber, { color: colors.muted }]}>{sections[1].count}</AppText>
-                  <AppText weight="medium" style={styles.summaryLabel}>Già gestiti</AppText>
-                </View>
+                  <View style={styles.gestitiLabelRow}>
+                    <AppText weight="medium" style={styles.summaryLabel}>Gestiti</AppText>
+                    <CaretRight size={13} color={colors.brand} weight="bold" />
+                  </View>
+                </Pressable>
               </View>
-            ) : null
-          }
-          renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
-              <AppText weight="bold" style={styles.sectionTitle}>{section.title}</AppText>
-              <View style={styles.countBadge}>
-                <AppText weight="bold" style={styles.countText}>{section.count}</AppText>
-              </View>
+            ) : null}
+          </>
+        }
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <AppText weight="bold" style={styles.sectionTitle}>{section.title}</AppText>
+            <View style={styles.countBadge}>
+              <AppText weight="bold" style={styles.countText}>{section.count}</AppText>
             </View>
-          )}
-          renderItem={({ item }) => (
-            <ClientRow client={item} onActions={openActions} onHistory={openHistory} />
-          )}
-          renderSectionFooter={({ section }) =>
-            section.data.length === 0 ? (
-              <AppText style={styles.emptySection}>
-                {searching
-                  ? "Nessun cliente trovato"
-                  : section.title === "DA VISITARE"
-                  ? "Nessun cliente da visitare in questo giro."
-                  : "Nessun cliente ancora gestito."}
-              </AppText>
-            ) : null
-          }
-          ListEmptyComponent={
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <ClientRow client={item} onActions={openActions} onHistory={openHistory} />
+        )}
+        renderSectionFooter={({ section }) =>
+          section.data.length === 0 ? (
+            <AppText style={styles.emptySection}>
+              {searching
+                ? "Nessun cliente trovato"
+                : section.title === "DA VISITARE"
+                ? "Nessun cliente da visitare in questo giro."
+                : "Nessun cliente ancora gestito."}
+            </AppText>
+          ) : null
+        }
+        ListEmptyComponent={
+          !activeGiroId ? (
+            <EmptyState
+              title="Nessun giro selezionato"
+              text="Scegli il giro di oggi con il pulsante verde qui sopra per vedere i clienti."
+            />
+          ) : clientsQuery.isLoading ? (
+            <Loading />
+          ) : (
             <EmptyState title="Nessun cliente" text="Questo giro non ha ancora clienti assegnati." />
-          }
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        />
-      )}
+          )
+        }
+        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+      />
 
       <QuickActionsSheet
         ref={sheetRef}
@@ -324,6 +346,7 @@ const useStyles = makeStyles((c) => ({
     marginBottom: spacing.sm,
   },
   summaryItem: { flex: 1, alignItems: "center", gap: 2 },
+  gestitiLabelRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   summaryNumber: { fontSize: 26, color: c.brand },
   summaryLabel: { fontSize: 12, color: c.muted },
   summaryDivider: { width: 1, alignSelf: "stretch", backgroundColor: c.border, marginVertical: spacing.xs },

@@ -12,6 +12,22 @@ export function todayLong(): string {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+const WEEKDAYS_SHORT = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+
+export function shortDayDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${WEEKDAYS_SHORT[d.getDay()]} ${dd}/${mm}`;
+}
+
+export function longDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${capitalize(WEEKDAYS[d.getDay()])} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export function shortDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);

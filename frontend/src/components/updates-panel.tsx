@@ -1,0 +1,181 @@
+import { useState } from "react";
+import { Pressable, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import { CaretRight, ClockCounterClockwise } from "phosphor-react-native";
+
+import { Activity, apiGet } from "@/src/api";
+import { AppText } from "@/src/components/ui";
+import { longDate, shortDayDate } from "@/src/format";
+import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
+
+type Scope = "all" | "umberto" | "andrea";
+
+const TYPE_COLORS: Record<Activity["type"], keyof ReturnType<typeof useTheme>["colors"]> = {
+  order: "brand",
+  collection: "success",
+  suspension: "error",
+  reschedule: "warning",
+};
+
+const AGENT_SHORT: Record<string, string> = { umberto: "Umberto", andrea: "Andrea" };
+
+export function ActivityRow({ item, showAgent }: { item: Activity; showAgent?: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const dotColor = colors[TYPE_COLORS[item.type]] as string;
+  return (
+    <View style={styles.row}>
+      <View style={styles.dateBadge}>
+        <AppText weight="semibold" style={styles.dateText}>{shortDayDate(item.created_at)}</AppText>
+      </View>
+      <View style={[styles.dot, { backgroundColor: dotColor }]} />
+      <View style={{ flex: 1 }}>
+        <AppText weight="semibold" style={styles.typeLabel} numberOfLines={1}>{item.type_label}</AppText>
+        <AppText style={styles.detail} numberOfLines={1}>
+          {item.client_ragione_sociale}{item.context ? ` · ${item.context}` : ""}
+        </AppText>
+      </View>
+      {showAgent && item.agent ? (
+        <AppText style={styles.agent}>{AGENT_SHORT[item.agent] ?? item.agent}</AppText>
+      ) : null}
+    </View>
+  );
+}
+
+export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const router = useRouter();
+  const [scope, setScope] = useState<Scope>("all");
+
+  // "Ultimo aggiornamento" always reflects the full allowed set (own + others).
+  const lastQuery = useQuery({
+    queryKey: ["activities", "all", "all", 1],
+    queryFn: () => apiGet<Activity[]>("/activities?scope=all&type=all&limit=1"),
+  });
+  const listQuery = useQuery({
+    queryKey: ["activities", scope, "all", 6],
+    queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=all&limit=6`),
+  });
+
+  const last = lastQuery.data?.[0] ?? null;
+  const list = listQuery.data ?? [];
+
+  return (
+    <View style={styles.wrap}>
+      {/* ULTIMO AGGIORNAMENTO */}
+      <View style={styles.lastCard}>
+        <AppText weight="bold" style={styles.lastHeading}>ULTIMO AGGIORNAMENTO</AppText>
+        {last ? (
+          <>
+            <AppText weight="semibold" style={styles.lastDate}>{longDate(last.created_at)}</AppText>
+            <AppText style={styles.lastActivityLabel}>Ultima attività:</AppText>
+            <AppText weight="semibold" style={styles.lastActivity} numberOfLines={2}>
+              {last.type_label} – {last.client_ragione_sociale}{last.context ? ` – ${last.context}` : ""}
+            </AppText>
+          </>
+        ) : (
+          <AppText style={styles.emptyText}>Nessuna attività registrata.</AppText>
+        )}
+      </View>
+
+      {/* ULTIMI AGGIORNAMENTI */}
+      <View style={styles.updatesCard}>
+        <View style={styles.updatesHead}>
+          <View style={styles.updatesTitleRow}>
+            <ClockCounterClockwise size={18} color={colors.brand} weight="bold" />
+            <AppText weight="bold" style={styles.updatesTitle}>ULTIMI AGGIORNAMENTI</AppText>
+          </View>
+          <Pressable testID="see-all-activities" onPress={() => router.push("/storico")} hitSlop={8} style={styles.seeAll}>
+            <AppText weight="semibold" style={styles.seeAllText}>Vedi tutti</AppText>
+            <CaretRight size={14} color={colors.brand} weight="bold" />
+          </Pressable>
+        </View>
+
+        {isAdmin ? (
+          <View style={styles.filterRow}>
+            {(["all", "umberto", "andrea"] as Scope[]).map((s) => {
+              const on = scope === s;
+              const label = s === "all" ? "Tutti" : s === "umberto" ? "Umberto" : "Andrea";
+              return (
+                <Pressable
+                  key={s}
+                  testID={`upd-filter-${s}`}
+                  onPress={() => setScope(s)}
+                  style={[styles.chip, on && styles.chipOn]}
+                >
+                  <AppText weight="semibold" style={[styles.chipText, on && styles.chipTextOn]}>{label}</AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {list.length === 0 ? (
+          <AppText style={styles.emptyText}>Nessun aggiornamento recente.</AppText>
+        ) : (
+          <View style={{ gap: spacing.xs }}>
+            {list.map((a) => (
+              <ActivityRow key={a.id} item={a} showAgent={isAdmin && scope === "all"} />
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  wrap: { gap: spacing.md, marginBottom: spacing.sm },
+  lastCard: {
+    backgroundColor: c.brandSecondary,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    gap: 2,
+  },
+  lastHeading: { fontSize: 12, color: c.onBrandSecondary, letterSpacing: 0.5 },
+  lastDate: { fontSize: 16, color: c.onBrandSecondary, marginTop: 2 },
+  lastActivityLabel: { fontSize: 12, color: c.onBrandSecondary, marginTop: spacing.xs, opacity: 0.8 },
+  lastActivity: { fontSize: 14, color: c.onBrandSecondary },
+  updatesCard: {
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  updatesHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  updatesTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  updatesTitle: { fontSize: 13, color: c.onSurface, letterSpacing: 0.5 },
+  seeAll: { flexDirection: "row", alignItems: "center", gap: 2 },
+  seeAllText: { fontSize: 13, color: c.brand },
+  filterRow: { flexDirection: "row", gap: spacing.sm },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary },
+  chipOn: { backgroundColor: c.brand },
+  chipText: { fontSize: 12, color: c.onSurfaceSecondary },
+  chipTextOn: { color: c.onBrand },
+  emptyText: { fontSize: 13, color: c.muted, fontStyle: "italic", paddingVertical: spacing.xs },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.divider,
+  },
+  dateBadge: {
+    backgroundColor: c.surfaceTertiary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    minWidth: 66,
+    alignItems: "center",
+  },
+  dateText: { fontSize: 12, color: c.onSurfaceSecondary },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  typeLabel: { fontSize: 14, color: c.onSurface },
+  detail: { fontSize: 12, color: c.muted, marginTop: 1 },
+  agent: { fontSize: 11, color: c.brand },
+}));
