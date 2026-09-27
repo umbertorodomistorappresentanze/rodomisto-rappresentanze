@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -9,6 +9,7 @@ import { Activity, apiGet } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Loading } from "@/src/components/ui";
 import { ActivityRow } from "@/src/components/updates-panel";
+import { dayGroupLabel, dayKey } from "@/src/format";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 type TypeFilter = "all" | "order" | "collection" | "suspension" | "reschedule";
@@ -43,6 +44,22 @@ export default function StoricoScreen() {
     queryKey: ["activities", scope, type, 500],
     queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=${type}&limit=500`),
   });
+
+  // Raggruppa per giorno preservando l'ordine cronologico (già desc dal backend).
+  const sections = useMemo(() => {
+    const acts = query.data ?? [];
+    const secs: { title: string; key: string; data: Activity[] }[] = [];
+    const idx: Record<string, number> = {};
+    for (const a of acts) {
+      const k = dayKey(a.created_at);
+      if (idx[k] === undefined) {
+        idx[k] = secs.length;
+        secs.push({ title: dayGroupLabel(a.created_at), key: k, data: [] });
+      }
+      secs[idx[k]].data.push(a);
+    }
+    return secs;
+  }, [query.data]);
 
   return (
     <View style={styles.root}>
@@ -81,10 +98,16 @@ export default function StoricoScreen() {
       {query.isLoading ? (
         <Loading />
       ) : (
-        <FlatList
-          data={query.data ?? []}
+        <SectionList
+          sections={sections}
           keyExtractor={(a) => a.id}
+          stickySectionHeadersEnabled
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.dayHeader}>
+              <AppText weight="bold" style={styles.dayHeaderText}>{section.title}</AppText>
+            </View>
+          )}
           renderItem={({ item }) => <ActivityRow item={item} showAgent={isAdmin && scope === "all"} />}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -114,4 +137,6 @@ const useStyles = makeStyles((c) => ({
   chipTextOn: { color: c.onBrand },
   empty: { padding: spacing.xl, alignItems: "center" },
   emptyText: { fontSize: 14, color: c.muted, fontStyle: "italic" },
+  dayHeader: { backgroundColor: c.surfaceSecondary, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  dayHeaderText: { fontSize: 13, color: c.onSurfaceTertiary, letterSpacing: 0.3 },
 }));

@@ -27,6 +27,7 @@ import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { shortDate, timeShort } from "@/src/format";
+import { lastActionLabel } from "@/src/utils/last-action";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 const EVENT_META: Record<string, { label: string; icon: any }> = {
@@ -122,6 +123,14 @@ export default function ClientDetail() {
   const client = clientQuery.data;
   const giroName = giriQuery.data?.find((g) => g.id === client.giro_id)?.name;
 
+  const hist = historyQuery.data ?? [];
+  const lastOf = (t: string) => hist.find((e) => e.type === t)?.created_at ?? null;
+  const ultimaAzione = lastActionLabel({
+    last_visit_at: lastOf("visit"),
+    last_order_at: lastOf("order"),
+    last_collection_at: lastOf("collection"),
+  });
+
   const cell = (client.extra?.telefono_cellulare || "").trim() ||
     (client.telefono && isMobile(client.telefono) ? client.telefono.trim() : "");
   const fisso = (client.extra?.telefono_ufficio || "").trim() ||
@@ -143,6 +152,11 @@ export default function ClientDetail() {
         bottomOffset={20}
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
       >
+        {/* Ultima azione */}
+        <View style={styles.lastActionCard} testID="last-action-card">
+          <AppText weight="semibold" style={styles.lastActionLabel}>ULTIMA AZIONE</AppText>
+          <AppText weight="bold" style={styles.lastActionValue}>{ultimaAzione}</AppText>
+        </View>
         {/* Contatti rapidi */}
         {(cell || fisso) ? (
           <View style={styles.card}>
@@ -351,6 +365,9 @@ const useStyles = makeStyles((c) => ({
   headerTitle: { fontSize: 18, color: c.onSurface, flex: 1 },
   editBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" },
   card: { backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, padding: spacing.lg, gap: spacing.md },
+  lastActionCard: { backgroundColor: c.brandSecondary, borderRadius: radius.md, padding: spacing.lg, gap: 2 },
+  lastActionLabel: { fontSize: 12, color: c.onBrandSecondary, letterSpacing: 0.5, opacity: 0.85 },
+  lastActionValue: { fontSize: 16, color: c.onBrandSecondary },
   cardTitle: { fontSize: 15, color: c.onSurface },
   field: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   fieldIcon: { width: 34, height: 34, borderRadius: radius.md, backgroundColor: c.brandSecondary, alignItems: "center", justifyContent: "center" },

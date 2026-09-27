@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 9 (2026-09-27) — Ultima azione (dettaglio + incassi), storico per giorno, recupero 3 Erre
+- Task1 "Ultima azione" nel dettaglio cliente (/client/[id]): card "ULTIMA AZIONE" (testID last-action-card) derivata dallo storico eventi, mostra una sola dicitura. Helper condiviso `frontend/src/utils/last-action.ts` (usato anche da ClientRow).
+- Task2 Incassi nell'ultima azione: backend `/api/clients` ora espone `last_order_at` E `last_collection_at` (helper generalizzato `_last_events_for`). ClientRow e dettaglio scelgono la più recente tra ordine/incasso/visita → "Ordine effettuato il" / "Incassato il" / "Ultima visita il" / "Mai visitato".
+- Task3 Storico (/storico) raggruppato per giorno con SectionList: header "Oggi"/"Ieri"/data estesa. Helper format.ts: `dayGroupLabel`, `dayKey`. Filtri tipo/utente invariati.
+- Task4 Recupero dati: inseriti nel DB Preview i 7 eventi del cliente "3 erre Srl" (client_id 8231a742-...) dal backup di produzione (/app/prod_import/events.json): 1 visit, 3 order Librandi (14/09 e 20/09), 1 collection (14/09), 1 note "TEST_NOTE". Skip-se-esistente per id. NB: la nota "TEST_NOTE" è dato di test presente nel backup prod.
+- Verificato: 4/4 test backend (tests/test_iter9_...) + flussi web (testing_agent iter9). Nessuna modifica a permessi/altri dati/logiche esistenti.
+
 ## Iter 8 (2026-09-27) — Ultima azione clienti, fix rimozione ricorrenze, dashboard aggiornamenti
 - Task1 "Ultima azione" lista clienti del giro: backend `/api/clients` ora espone `last_order_at` (helper `_last_orders_for`) oltre a `last_visit_at`. ClientRow mostra UNA dicitura tra: "Ordine effettuato il GG/MM/AAAA" / "Ultima visita il GG/MM/AAAA" / "Mai visitato" (persistente, indipendente dal ciclo 21 giorni). File: server.py, frontend/src/components/client-row.tsx, format.ts (dmyDate).
 - Task2 Fix rimozione cliente dalle ricorrenze: la conferma usava Alert.alert (non funzionante su web/PWA) → creato helper cross-platform `frontend/src/utils/confirm.ts` (web → window.confirm, native → Alert). Endpoint DELETE /api/recurrences/{company}/members/{member_id} già corretto. File: ricorrenza/[company].tsx.

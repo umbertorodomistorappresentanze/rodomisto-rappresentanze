@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 9 (Rodomisto Rappresentanze) validated end-to-end for the 4 requested changes. Backend: 4/4 targeted pytest cases PASSED in /app/backend/tests/test_iter9_last_action_and_recovery.py — (a) GET /api/clients?giro_id=... now returns last_visit_at + last_order_at + last_collection_at (each null or ISO 8601) for every client of the sampled giro; (b) last_collection_at equals max(created_at) over events{type='collection'} in that client's history; (c) GET /api/clients/8231a742-8d0f-4ea7-ac31-5ce340262567/history returns the 7 recovered '3 erre Srl' events including >=3 Librandi orders (2026-09-14 and 2026-09-20), 1 collection on 2026-09-14 and note text 'TEST_NOTE'; (d) the giro-row pill of '3 erre Srl' surfaces the same last_order_at/last_collection_at as its history. Frontend (Expo web, 390x844, umberto/admin): Task1 — /client/[id] shows 'last-action-card' with EXACTLY ONE of the four phrases (verified 'Mai visitato' on a giro sample and 'Ordine effettuato il 27/09/2026' on 3 erre Srl); Task2 — giro client list contains at least 'Ordine effettuato il' + 'Mai visitato' phrases (Incassato/Ultima visita conditional on data — util covers all 4 cases and Incassato phrase confirmed on /storico); Task3 — /storico is grouped by day with 'Oggi' + 'Ieri' + 6 extended date headers (regex match, e.g. 'Giovedì 24 settembre 2026'), all filter chips present (sto-type-{all,order,collection,suspension,reschedule} + sto-scope-{all,umberto,andrea}), applying 'Incassi' filter keeps only 'Incassato' rows (no 'Ordine effettuato'); Task4 — Storico and 3 erre Srl detail both surface the recovered events ('3 erre' + 'Librandi' visible in Storico DOM; the detail shows 5 'Librandi' occurrences, 1 'TEST_NOTE', 1 'Incasso' in history). No red screen; no new deprecated Expo packages introduced.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "Pre-existing RN Web console warnings 'shadow* deprecated → boxShadow' and 'props.pointerEvents deprecated → style.pointerEvents'. Unchanged from iter8. Reference: /app/frontend/src/theme.ts and shared style modules."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_last_action_and_recovery.py",
+    "/app/test_reports/pytest/pytest_iter9.xml"
+  ],
+  "action_items": [
+    "No blocking action required. All 4 iteration-9 features work end-to-end on backend + web."
+  ],
+  "critical_code_review_comments": [
+    "server.py L645-706: _last_events_for(client_ids, ['order','collection']) is invoked inside list_clients and injected as last_order_at + last_collection_at into every client row. Persistent, event-derived, matches spec.",
+    "src/utils/last-action.ts: correctly picks the item with the largest timestamp across {order, collection, visit}; the empty case returns 'Mai visitato'. Matches the required precedence.",
+    "app/client/[id].tsx L127-132: last action is derived by finding the FIRST occurrence of each type in the reversed-by-date history (backend sorts history desc), so hist.find(type=x)?.created_at correctly returns the latest — no full scan needed. Card testID='last-action-card' is present exactly once.",
+    "components/client-row.tsx L74: switched from ad-hoc order/visit comparison to shared lastActionLabel(client) → single source of truth. Row pill can display any of the 4 phrases depending on data. Good DRY win.",
+    "app/storico.tsx: SectionList grouped by dayKey(created_at) with dayGroupLabel giving 'Oggi'/'Ieri'/longDate (extended Italian). stickySectionHeadersEnabled looks correct. Filters preserved (sto-type-* / sto-scope-*). No _id leak.",
+    "format.ts L31-45: dayGroupLabel + dayKey work in the local timezone which is correct since /activities returns ISO UTC and JS Date renders in local zone (Europe/Rome for the target audience)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_last_action_and_recovery.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 iteration-9 targeted tests). last_order_at/last_collection_at exposed; 3 erre Srl backup restored correctly.",
+    "frontend": "100% (4/4 tasks). Detail card, giro pill, storico grouping+filters, and 3 erre recovered events all verified via Playwright on the public preview URL."
+  },
+  "seed_data_creation": "No new seed data added. Tests are read-only; they rely on the 3 erre Srl backup already inserted by E1 (client_id 8231a742-8d0f-4ea7-ac31-5ce340262567).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature contract for iteration 9: (1) GET /api/clients?giro_id=... → every row exposes last_visit_at, last_order_at, last_collection_at (each null or ISO 8601 UTC), the mobile row picks the most recent as its 'ultima azione' pill via src/utils/last-action.ts. (2) GET /api/clients/{id}/history is unchanged in shape but the '3 erre Srl' client_id 8231a742-8d0f-4ea7-ac31-5ce340262567 now returns 7+ events including 3 Librandi orders (14/09 x2 + 20/09), 1 visit, 1 collection on 14/09/2026 and 1 note 'TEST_NOTE'. (3) /storico is grouped by day via SectionList using dayKey/dayGroupLabel from src/format.ts; header labels are 'Oggi', 'Ieri' or long italian date (e.g. 'Giovedì 24 settembre 2026'). Filter testIDs: sto-type-{all,order,collection,suspension,reschedule}, sto-scope-{all,umberto,andrea}. (4) The client-row pill in the giro list uses the same lastActionLabel util as the detail card (testID='last-action-card'). Note for Playwright: on /client/[id] to open a specific client from the giro list, the row's onPress opens an actions modal — prefer navigating directly to /client/{id} via URL; extract the id from the row testID (client-row-<uuid>) or from the API. Login flow: page.get_by_placeholder('Nome utente…').fill('umberto'), password, then button label 'Accedi' (NOT 'Entra').",
+  "rca_of_issue": "N/A — no bug found; all 4 iteration-9 features work end-to-end."
+}

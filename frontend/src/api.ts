@@ -100,6 +100,7 @@ export type Client = {
   permanent_note: string;
   last_visit_at: string | null;
   last_order_at?: string | null;
+  last_collection_at?: string | null;
   snoozed_until: string | null;
   extra: ClientExtra;
   status?: "da_visitare" | "gestito";

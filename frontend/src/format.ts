@@ -28,6 +28,22 @@ export function longDate(iso: string | null): string {
   return `${capitalize(WEEKDAYS[d.getDay()])} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+export function dayGroupLabel(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (diffDays === 0) return "Oggi";
+  if (diffDays === 1) return "Ieri";
+  return longDate(iso);
+}
+
+export function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export function dmyDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
