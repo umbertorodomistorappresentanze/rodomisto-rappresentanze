@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Web full-stack (2026-09-27)
+- App confermata come web full-stack (Expo React Native Web). Dipendenze già presenti: react-dom 19.2.3, react-native-web 0.21.2, @expo/metro-runtime 57.0.15.
+- app.json già con `web.bundler = metro`, `output: single`, manifest PWA (nome "Rodomisto Rappresentanze", it, standalone, themeColor #047857).
+- Aggiunto script build web in frontend/package.json: `"build": "npx expo export -p web"`. Build verificata → genera `/app/frontend/dist` (index.html + _expo bundle + assets).
+- Serving: in ambiente Emergent il frontend è servito da Metro (preview) e dal deploy della piattaforma (Publish); il backend FastAPI serve solo /api/*. NON è stato aggiunto static-serving del dist nel backend perché l'ingress instrada `/` al frontend e `/api/*` a FastAPI (lo static in FastAPI non verrebbe raggiunto). Tutti i dati (clients/events/giri/ricorrenze/sospesi) restano invariati e accessibili da browser.
+
+
 ## Implemented (2026-09-26) — Ultimi aggiornamenti, Storico, Gestiti, dicitura ricorrenze
 - HOME "ULTIMI AGGIORNAMENTI": nuovo riquadro (src/components/updates-panel.tsx) con le ultime attività (solo order/collection/suspension/reschedule), data leggibile senza orario ("Sab 26/09"). Filtro Tutti/Umberto/Andrea mostrato solo all'admin; agent vede sempre e solo le proprie (enforced backend). Link "Vedi tutti" → /storico.
 - HOME "ULTIMO AGGIORNAMENTO": card con data estesa ("Giovedì 24 settembre 2026") + ultima attività; per admin sempre scope=all (proprie + Andrea), per agent solo le proprie.
