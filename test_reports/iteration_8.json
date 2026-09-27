@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 8 verified the 3 changes for 'Rodomisto Rappresentanze' (last_order_at pill in giro client rows, cross-platform delete confirm in Ricorrenze, and Home 'ULTIMO AGGIORNAMENTO' + 3-row activities preview with 'Ultimo accesso' line). Backend: 4/4 new pytest cases PASSED in /app/backend/tests/test_iter8_last_order_and_recurrence_delete.py — (a) GET /api/clients?giro_id=... returns last_order_at (nullable ISO 8601) on every client alongside preserved last_visit_at; (b) after POST /api/events {type:'order'} the value moves forward correctly (persistent, event-derived); (c) DELETE /api/recurrences/{company}/members/{member_id} returns 200 {ok:true}, removes only the membership (client remains fetchable via GET /api/clients/{id}) and second delete returns 404; (d) unknown member_id returns 404. Frontend (Expo web, 390x844): Task1 — Home → 'SELEZIONA IL GIRO DI OGGI' → giro list shows exactly one pill per client matching /Ordine effettuato il DD/MM/YYYY|Ultima visita il DD/MM/YYYY|Mai visitato/ (both 'Ordine effettuato il' and 'Mai visitato' phrases detected in DOM). Task2 — /ricorrenza/mazzetti trash icons: BEFORE=47, clicking the first ric-remove triggers the cross-platform confirm (window.confirm on web) 'Rimuovi dalla ricorrenza … Vuoi rimuovere An.Tal Srl … Il cliente resta in anagrafica…', accepting deletes the membership → AFTER=46, target testID no longer in DOM, list stays intact and scrolls (Catanzaro e limitrofi 32 rows). Task3 — 'ULTIMO AGGIORNAMENTO' card shows longDate + 'Ultima attività:' + type_label and the 'Primo accesso' line (or 'Ultimo accesso: …' on subsequent logins). 'ULTIMI AGGIORNAMENTI' shows at most 3 preview rows (total 4 type_label occurrences = 1 top + 3 list, ≤ 4 confirmed). testIDs updates-expand, see-all-activities, updates-open-history are visible and 'updates-open-history' click navigates correctly to /storico. No red screen; only pre-existing RN-web deprecation warnings (shadow*, pointerEvents).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (various)", "issue": "RN Web console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' (pre-existing, unchanged)"},
+      {"component": "styles (various)", "issue": "RN Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' (pre-existing, unchanged)"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_last_order_and_recurrence_delete.py",
+    "/app/test_reports/pytest/pytest_iter8.xml"
+  ],
+  "action_items": [
+    "(No blocking action required.) All 3 iteration-8 features work end-to-end on backend + web.",
+    "(Optional cleanup) The variable 'effettuatiCount' in /app/frontend/app/ricorrenza/[company].tsx (line ~81) is now displayed as 'Gestiti (n)'; consider renaming to 'gestitiCount' for consistency."
+  ],
+  "critical_code_review_comments": [
+    "server.py L645-703: new _last_orders_for() bulk-loads all 'order' events for a giro's clients then reduces to the max created_at per client. Persistent by design (events are never cleared) — matches the requirement 'independente dal ciclo 21 giorni'. Included in GET /api/clients response as 'last_order_at' (ISO). Good.",
+    "server.py L1180-1190 DELETE /api/recurrences/{company}/members/{member_id}: correctly uses recurrence_members.delete_one (hard removal of membership only) after permission check; the underlying client doc is never touched. Returns 200 {ok:true}. Second call → 404 as expected.",
+    "client-row.tsx L74-87: correct precedence — if orderTs !== null and (visitTs === null || orderTs >= visitTs) → 'Ordine effettuato il', else if visitTs !== null → 'Ultima visita il', else → 'Mai visitato'. Colors: 'brandSecondary' for both order/visit, muted 'surfaceTertiary' for 'Mai visitato'. Uses dmyDate() for DD/MM/YYYY.",
+    "confirm.ts: correct cross-platform helper — Platform.OS === 'web' → window.confirm(); native → Alert.alert with destructive style. Fixes the reported web bug where Alert.alert buttons weren't actionable.",
+    "updates-panel.tsx L58-66 + L98: 'Ultimo accesso' is read from AsyncStorage BEFORE writing the current timestamp — this is exactly the required behaviour ('mostra l'accesso precedente'). 'Primo accesso' is shown when previous value is null. Both list & lastQuery are separate (limit=1 for top, limit=3 for preview) — matches the 3-row cap requirement.",
+    "updates-panel.tsx L105-152: two navigations to /storico (title area + 'Vedi tutti' + 'Apri storico completo') all with distinct testIDs (updates-expand, see-all-activities, updates-open-history) — well-structured."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_last_order_and_recurrence_delete.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 iteration-8 targeted tests). Endpoint behaviour matches spec.",
+    "frontend": "100% (3/3 tasks). Task1 pill labels present, Task2 web-confirm delete removes exactly the targeted member (47 → 46), Task3 last-access line + 3-row cap + navigation buttons all working."
+  },
+  "seed_data_creation": "Test 'test_delete_returns_ok_and_removes_only_membership' creates a temporary member (TEST_iter8_member_<uuid>) with agent=umberto to safely delete without touching seeded data; the created client is then soft-deleted at test end. The manual browser test permanently removed the first Mazzetti/Natale member (An.Tal Srl) from the recurrence — this was explicitly allowed by E1 ('dopo il test la rimozione è definitiva sul DB, va bene'). The client itself remains in anagrafica.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New backend tests: /app/backend/tests/test_iter8_last_order_and_recurrence_delete.py (uses conftest umberto_headers fixture, BASE_URL from EXPO_PUBLIC_BACKEND_URL). Feature contract: (1) GET /api/clients?giro_id=... → each client has last_order_at (ISO 8601 UTC or null); it is the max created_at over events{type:'order', deleted_at:null}. (2) DELETE /api/recurrences/{company}/members/{member_id} → 200 {ok:true}, hard-delete membership only; client survives in clients coll. (3) Frontend testIDs added/kept in scope: client-row-<id>, client-history-<id>, client-actions-<id>, ric-remove-<id>, updates-expand, see-all-activities, updates-open-history, period-<key>, filter-da-gestire, filter-effettuati, ric-search. On web the confirm is window.confirm — register page.on('dialog', d.accept()) BEFORE clicking; playwright's `.click()` may hang waiting for the dialog to close on RN-web Pressable, so prefer `page.evaluate(\"document.querySelector('[data-testid=X]').click()\")` to trigger it deterministically.",
+  "rca_of_issue": "N/A — no product bug found. Original bug 'delete non partiva su web' has been correctly fixed via /app/frontend/src/utils/confirm.ts (Platform.OS==='web' → window.confirm). Verified end-to-end: dialog appears, on accept the DELETE fires and the list refreshes (47 → 46)."
+}

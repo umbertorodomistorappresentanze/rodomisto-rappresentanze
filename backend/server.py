@@ -642,6 +642,26 @@ async def _active_suspensions_for(client_ids: List[str]) -> dict:
     return result
 
 
+async def _last_orders_for(client_ids: List[str]) -> dict:
+    """Return {client_id: created_at(datetime)} of the most recent 'order' event.
+    Persistent across months / 21-day cycle resets (events are never cleared)."""
+    if not client_ids:
+        return {}
+    events = await db.events.find(
+        {"client_id": {"$in": client_ids}, "deleted_at": None, "type": "order"},
+        {"_id": 0, "client_id": 1, "created_at": 1},
+    ).to_list(200000)
+    out = {}
+    for e in events:
+        cid = e["client_id"]
+        cur = e.get("created_at")
+        if cur is None:
+            continue
+        if cid not in out or cur > out[cid]:
+            out[cid] = cur
+    return out
+
+
 def _compute_status(doc: dict, handled_today: set) -> str:
     now = now_utc()
     if doc["id"] in handled_today:
@@ -671,12 +691,14 @@ async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)
     ids = [d["id"] for d in docs]
     handled = await _handled_today_ids(ids)
     suspensions = await _active_suspensions_for(ids)
+    last_orders = await _last_orders_for(ids)
     result = []
     for d in docs:
         pub = client_public(d)
         pub["status"] = _compute_status(d, handled)
         pub["handled_today"] = d["id"] in handled
         pub["suspensions"] = suspensions.get(d["id"], [])
+        pub["last_order_at"] = iso(last_orders.get(d["id"]))
         result.append(pub)
     return result
 

@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 8 (2026-09-27) — Ultima azione clienti, fix rimozione ricorrenze, dashboard aggiornamenti
+- Task1 "Ultima azione" lista clienti del giro: backend `/api/clients` ora espone `last_order_at` (helper `_last_orders_for`) oltre a `last_visit_at`. ClientRow mostra UNA dicitura tra: "Ordine effettuato il GG/MM/AAAA" / "Ultima visita il GG/MM/AAAA" / "Mai visitato" (persistente, indipendente dal ciclo 21 giorni). File: server.py, frontend/src/components/client-row.tsx, format.ts (dmyDate).
+- Task2 Fix rimozione cliente dalle ricorrenze: la conferma usava Alert.alert (non funzionante su web/PWA) → creato helper cross-platform `frontend/src/utils/confirm.ts` (web → window.confirm, native → Alert). Endpoint DELETE /api/recurrences/{company}/members/{member_id} già corretto. File: ricorrenza/[company].tsx.
+- Task3 Dashboard "Ultimi aggiornamenti": anteprima limitata a 3 (era 6); aggiunta scritta "Ultimo accesso: <data e ora>" (salvata client-side in AsyncStorage per-utente, mostra accesso precedente; primo accesso → "Primo accesso"); riquadro espandibile ("Apri storico completo" + titolo cliccabili → /storico). File: updates-panel.tsx, format.ts (dateTimeShort).
+- Verificato: 4/4 test backend (tests/test_iter8_...) + flussi web (testing_agent iter8). Nessuna modifica a DB/dati/permessi/logiche esistenti.
+
 ## Web full-stack (2026-09-27)
 - App confermata come web full-stack (Expo React Native Web). Dipendenze già presenti: react-dom 19.2.3, react-native-web 0.21.2, @expo/metro-runtime 57.0.15.
 - app.json già con `web.bundler = metro`, `output: single`, manifest PWA (nome "Rodomisto Rappresentanze", it, standalone, themeColor #047857).

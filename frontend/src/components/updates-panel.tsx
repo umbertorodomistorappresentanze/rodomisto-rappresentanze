@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { CaretRight, ClockCounterClockwise } from "phosphor-react-native";
 
 import { Activity, apiGet } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { AppText } from "@/src/components/ui";
-import { longDate, shortDayDate } from "@/src/format";
+import { dateTimeShort, longDate, shortDayDate } from "@/src/format";
+import { storage } from "@/src/utils/storage";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 type Scope = "all" | "umberto" | "andrea";
@@ -47,7 +49,21 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const [scope, setScope] = useState<Scope>("all");
+  const [lastAccess, setLastAccess] = useState<string | null>(null);
+
+  // Ultimo accesso dell'utente (salvato localmente sul dispositivo): mostra
+  // l'accesso precedente, poi registra quello corrente.
+  useEffect(() => {
+    if (!user?.username) return;
+    const key = `last_access_${user.username}`;
+    (async () => {
+      const prev = await storage.getItem<string | null>(key, null);
+      setLastAccess(prev);
+      await storage.setItem(key, new Date().toISOString());
+    })();
+  }, [user?.username]);
 
   // "Ultimo aggiornamento" always reflects the full allowed set (own + others).
   const lastQuery = useQuery({
@@ -55,8 +71,8 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
     queryFn: () => apiGet<Activity[]>("/activities?scope=all&type=all&limit=1"),
   });
   const listQuery = useQuery({
-    queryKey: ["activities", scope, "all", 6],
-    queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=all&limit=6`),
+    queryKey: ["activities", scope, "all", 3],
+    queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=all&limit=3`),
   });
 
   const last = lastQuery.data?.[0] ?? null;
@@ -78,15 +94,23 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
         ) : (
           <AppText style={styles.emptyText}>Nessuna attività registrata.</AppText>
         )}
+        <AppText style={styles.lastAccess}>
+          {lastAccess ? `Ultimo accesso: ${dateTimeShort(lastAccess)}` : "Primo accesso"}
+        </AppText>
       </View>
 
       {/* ULTIMI AGGIORNAMENTI */}
       <View style={styles.updatesCard}>
         <View style={styles.updatesHead}>
-          <View style={styles.updatesTitleRow}>
+          <Pressable
+            testID="updates-expand"
+            onPress={() => router.push("/storico")}
+            hitSlop={8}
+            style={styles.updatesTitleRow}
+          >
             <ClockCounterClockwise size={18} color={colors.brand} weight="bold" />
             <AppText weight="bold" style={styles.updatesTitle}>ULTIMI AGGIORNAMENTI</AppText>
-          </View>
+          </Pressable>
           <Pressable testID="see-all-activities" onPress={() => router.push("/storico")} hitSlop={8} style={styles.seeAll}>
             <AppText weight="semibold" style={styles.seeAllText}>Vedi tutti</AppText>
             <CaretRight size={14} color={colors.brand} weight="bold" />
@@ -121,6 +145,11 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
             ))}
           </View>
         )}
+
+        <Pressable testID="updates-open-history" onPress={() => router.push("/storico")} style={styles.expandBtn}>
+          <AppText weight="semibold" style={styles.expandText}>Apri storico completo</AppText>
+          <CaretRight size={14} color={colors.brand} weight="bold" />
+        </Pressable>
       </View>
     </View>
   );
@@ -138,6 +167,7 @@ const useStyles = makeStyles((c) => ({
   lastDate: { fontSize: 16, color: c.onBrandSecondary, marginTop: 2 },
   lastActivityLabel: { fontSize: 12, color: c.onBrandSecondary, marginTop: spacing.xs, opacity: 0.8 },
   lastActivity: { fontSize: 14, color: c.onBrandSecondary },
+  lastAccess: { fontSize: 11, color: c.onBrandSecondary, opacity: 0.75, marginTop: spacing.sm },
   updatesCard: {
     backgroundColor: c.surface,
     borderWidth: 1,
@@ -151,6 +181,12 @@ const useStyles = makeStyles((c) => ({
   updatesTitle: { fontSize: 13, color: c.onSurface, letterSpacing: 0.5 },
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2 },
   seeAllText: { fontSize: 13, color: c.brand },
+  expandBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 2,
+    marginTop: spacing.xs, paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: c.divider,
+  },
+  expandText: { fontSize: 13, color: c.brand },
   filterRow: { flexDirection: "row", gap: spacing.sm },
   chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary },
   chipOn: { backgroundColor: c.brand },

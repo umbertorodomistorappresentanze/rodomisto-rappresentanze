@@ -3,7 +3,7 @@ import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone, Warning } from
 
 import { Client } from "@/src/api";
 import { AppText } from "@/src/components/ui";
-import { shortDate } from "@/src/format";
+import { dmyDate } from "@/src/format";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 const useStyles = makeStyles((c) => ({
@@ -69,19 +69,21 @@ export function ClientRow({
 
   const zonaDiff = client.zona && client.zona !== client.citta;
 
+  // "Ultima azione" persistente (indipendente dal ciclo 21 giorni): mostra
+  // l'azione più recente tra ordine e visita, oppure "Mai visitato".
+  const visitTs = client.last_visit_at ? new Date(client.last_visit_at).getTime() : null;
+  const orderTs = client.last_order_at ? new Date(client.last_order_at).getTime() : null;
   let pillBg = colors.surfaceTertiary;
   let pillColor = colors.onSurfaceTertiary;
-  let pillText = "";
-  if (client.handled_today) {
+  let pillText = "Mai visitato";
+  if (orderTs !== null && (visitTs === null || orderTs >= visitTs)) {
     pillBg = colors.brandSecondary;
     pillColor = colors.onBrandSecondary;
-    pillText = "Gestito oggi";
-  } else if (!client.last_visit_at) {
-    pillBg = colors.surfaceTertiary;
-    pillColor = colors.onSurfaceTertiary;
-    pillText = "Mai visitato";
-  } else {
-    pillText = `Ultima visita: ${shortDate(client.last_visit_at)}`;
+    pillText = `Ordine effettuato il ${dmyDate(client.last_order_at ?? null)}`;
+  } else if (visitTs !== null) {
+    pillBg = colors.brandSecondary;
+    pillColor = colors.onBrandSecondary;
+    pillText = `Ultima visita il ${dmyDate(client.last_visit_at)}`;
   }
 
   return (

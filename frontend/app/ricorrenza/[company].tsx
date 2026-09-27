@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable, SectionList, TextInput, View } from "react-native";
+import { Pressable, SectionList, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -8,6 +8,7 @@ import { ArrowCounterClockwise, CaretLeft, CheckCircle, MagnifyingGlass, Plus, T
 import { apiDelete, apiGet, apiPost, RecurrenceClient, RecurrenceDef, RecurrenceMembers } from "@/src/api";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { confirmAction } from "@/src/utils/confirm";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 function fmtDate(iso: string | null): string {
@@ -68,13 +69,12 @@ export default function RicorrenzaDetail() {
   });
 
   const confirmRemove = (item: RecurrenceClient) => {
-    Alert.alert(
+    confirmAction(
       "Rimuovi dalla ricorrenza",
       `Vuoi rimuovere ${item.ragione_sociale} dalla ricorrenza? Il cliente resta in anagrafica, nei giri territoriali e nelle altre ricorrenze.`,
-      [
-        { text: "Annulla", style: "cancel" },
-        { text: "Rimuovi", style: "destructive", onPress: () => removeMember.mutate(item.member_id) },
-      ]
+      "Rimuovi",
+      () => removeMember.mutate(item.member_id),
+      { destructive: true }
     );
   };
 
