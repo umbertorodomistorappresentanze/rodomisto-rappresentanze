@@ -36,6 +36,14 @@ dist
 !.env.example
 !.env.*.example
 
+# Local and production data
+*.xlsx
+/prod_import/
+/preview_db_export/
+/test_reports/
+/test_result.md
+/memory/PRD.md
+
 *token.json*
 *credentials.json*
 
