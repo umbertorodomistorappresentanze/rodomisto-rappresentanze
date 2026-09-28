@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 11 (2026-09-28) — Login username OR email + log credenziali (debug Render 401)
+- Login (`POST /api/auth/login`) ora cerca l'utente con `$or` su `username` ED `email` (case-insensitive, strip). Sia 'umberto' sia l'email accedono. Token subject resta user["username"].
+- Aggiunti log a livello INFO all'avvio (seed) che stampano le combinazioni identificativo/password/ruolo attive → visibili nei log del server (utile per debug su Render). Aggiunti anche log su login fallito (utente non trovato / password errata).
+- La verifica password resta bcrypt (NON indebolita). Il fix del 401 si basa su: seed idempotente che ripara la password + accettazione email/username + log diagnostici.
+- Combinazioni attive: `umberto`/`Umberto2774!` (admin), `umbertorodomistorappresentanze@gmail.com`/`2774_aprI` (admin), `andrea`/`Andrea1606!` (agent).
+- Verificato via curl (username 200, email 200, password errata 401, log stampati).
+
 ## Iter 10 (2026-09-27) — Fix 401 login / seed admin via email (Render)
 - Root cause 401 su Render: l'admin veniva creato solo come username "umberto"/"andrea"; il login via email falliva. Inoltre il seed leggeva `os.environ["SEED_*"]` (KeyError se assenti su Render).
 - Fix (server.py seed()): aggiunto utente admin con login via EMAIL `umbertorodomistorappresentanze@gmail.com` / password `2774_aprI` (override env `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`). Email normalizzata lowercase (login già fa strip+lower). Seed reso robusto con default per SEED_UMBERTO/ANDREA (no crash). Repair idempotente: all'avvio ripristina la password se non combacia e forza role=admin, is_active. Salvato hash bcrypt $2b$12$.

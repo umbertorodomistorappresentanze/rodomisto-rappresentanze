@@ -274,6 +274,14 @@ async def seed():
                 updates["hashed_password"] = hash_pw(s["password"])
             await db.users.update_one({"username": s["username"]}, {"$set": updates})
 
+    logger.info("=== SEED UTENTI: credenziali di accesso attive ===")
+    for s in seeds:
+        logger.info(
+            "LOGIN -> identificativo: '%s' | password: '%s' | ruolo: %s",
+            s["username"], s["password"], s["role"],
+        )
+    logger.info("Il login accetta sia lo username sia l'email (senza distinzione maiuscole/spazi).")
+
     for i, name in enumerate(seed_data.COMPANIES):
         existing = await db.companies.find_one({"name": name})
         if not existing:
@@ -480,13 +488,16 @@ async def root():
 
 @api.post("/auth/login")
 async def login(body: LoginRequest):
-    username = body.username.strip().lower()
-    user = await db.users.find_one({"username": username})
+    ident = body.username.strip().lower()
+    # Accetta sia lo username (es. 'umberto') sia l'email (case-insensitive).
+    user = await db.users.find_one({"$or": [{"username": ident}, {"email": ident}]})
     dummy = "$2b$12$" + "x" * 53
     if not user:
         verify_pw(body.password, dummy)
+        logger.info("LOGIN FALLITO: identificativo '%s' non trovato", ident)
         raise HTTPException(status_code=401, detail="Username o password errati")
     if not user.get("is_active", False) or not verify_pw(body.password, user["hashed_password"]):
+        logger.info("LOGIN FALLITO: password errata per '%s'", ident)
         raise HTTPException(status_code=401, detail="Username o password errati")
     token = create_token(user["username"])
     return {
