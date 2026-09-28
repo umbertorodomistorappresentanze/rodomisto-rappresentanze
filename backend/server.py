@@ -40,6 +40,11 @@ ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
 ROME = ZoneInfo("Europe/Rome")
 VISIT_THRESHOLD_DAYS = 21
 
+# Admin seed (login via email). Overridable via env on Render; safe defaults so a
+# fresh production DB always gets a working admin without extra configuration.
+SEED_ADMIN_EMAIL = os.environ.get("SEED_ADMIN_EMAIL", "umbertorodomistorappresentanze@gmail.com").strip().lower()
+SEED_ADMIN_PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD", "2774_aprI")
+
 # Payment modes selectable per single order. days=None means no future suspension.
 PAYMENT_MODES = {
     "anticipato": {"label": "Anticipato", "days": None},
@@ -240,9 +245,13 @@ async def seed():
     await db.users.create_index("username", unique=True)
     seeds = [
         {"username": "umberto", "display_name": "Umberto Rodomisto", "role": "admin",
-         "password": os.environ["SEED_UMBERTO_PASSWORD"]},
+         "password": os.environ.get("SEED_UMBERTO_PASSWORD", "Umberto2774!")},
         {"username": "andrea", "display_name": "Andrea Azzarito", "role": "agent",
-         "password": os.environ["SEED_ANDREA_PASSWORD"]},
+         "password": os.environ.get("SEED_ANDREA_PASSWORD", "Andrea1606!")},
+        # Admin che effettua il login tramite email (fix 401 su deploy Render).
+        {"username": SEED_ADMIN_EMAIL, "email": SEED_ADMIN_EMAIL,
+         "display_name": "Umberto Rodomisto", "role": "admin",
+         "password": SEED_ADMIN_PASSWORD},
     ]
     for s in seeds:
         existing = await db.users.find_one({"username": s["username"]})
@@ -250,6 +259,7 @@ async def seed():
             await db.users.insert_one({
                 "id": str(uuid.uuid4()),
                 "username": s["username"],
+                "email": s.get("email"),
                 "display_name": s["display_name"],
                 "role": s["role"],
                 "hashed_password": hash_pw(s["password"]),
@@ -257,7 +267,9 @@ async def seed():
                 "created_at": now_utc(),
             })
         else:
-            updates = {"role": s["role"]}
+            updates = {"role": s["role"], "is_active": True}
+            if s.get("email"):
+                updates["email"] = s["email"]
             if not verify_pw(s["password"], existing.get("hashed_password", "")):
                 updates["hashed_password"] = hash_pw(s["password"])
             await db.users.update_one({"username": s["username"]}, {"$set": updates})

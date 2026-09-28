@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 10 (2026-09-27) — Fix 401 login / seed admin via email (Render)
+- Root cause 401 su Render: l'admin veniva creato solo come username "umberto"/"andrea"; il login via email falliva. Inoltre il seed leggeva `os.environ["SEED_*"]` (KeyError se assenti su Render).
+- Fix (server.py seed()): aggiunto utente admin con login via EMAIL `umbertorodomistorappresentanze@gmail.com` / password `2774_aprI` (override env `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`). Email normalizzata lowercase (login già fa strip+lower). Seed reso robusto con default per SEED_UMBERTO/ANDREA (no crash). Repair idempotente: all'avvio ripristina la password se non combacia e forza role=admin, is_active. Salvato hash bcrypt $2b$12$.
+- Verificato via curl: login email OK (anche con maiuscole/spazi), umberto invariato, password errata → 401, record DB corretto. Consultato integration_expert (auth) prima della modifica.
+- Nota deploy: su Render serve redeploy col codice aggiornato; il seed ripara/crea l'admin all'avvio.
+
 ## Iter 9 (2026-09-27) — Ultima azione (dettaglio + incassi), storico per giorno, recupero 3 Erre
 - Task1 "Ultima azione" nel dettaglio cliente (/client/[id]): card "ULTIMA AZIONE" (testID last-action-card) derivata dallo storico eventi, mostra una sola dicitura. Helper condiviso `frontend/src/utils/last-action.ts` (usato anche da ClientRow).
 - Task2 Incassi nell'ultima azione: backend `/api/clients` ora espone `last_order_at` E `last_collection_at` (helper generalizzato `_last_events_for`). ClientRow e dettaglio scelgono la più recente tra ordine/incasso/visita → "Ordine effettuato il" / "Incassato il" / "Ultima visita il" / "Mai visitato".
