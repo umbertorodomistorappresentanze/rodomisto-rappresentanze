@@ -241,47 +241,61 @@ def event_public(doc: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Seeding / import
 # ---------------------------------------------------------------------------
-async def seed():
-    await db.users.create_index("username", unique=True)
-    seeds = [
-        {"username": "umberto", "display_name": "Umberto Rodomisto", "role": "admin",
+async def ensure_admin_users():
+    """Runs at EVERY startup on the ACTIVE database. Guarantees the admin/agent
+    users exist with the expected password (force-updates it if different).
+    Never crashes startup (each user isolated in try/except)."""
+    try:
+        await db.users.create_index("username", unique=True)
+    except Exception as e:
+        logger.warning("ADMIN SEED: impossibile creare l'indice univoco username: %s", e)
+
+    accounts = [
+        {"username": "umberto", "email": None, "display_name": "Umberto Rodomisto", "role": "admin",
          "password": os.environ.get("SEED_UMBERTO_PASSWORD", "Umberto2774!")},
-        {"username": "andrea", "display_name": "Andrea Azzarito", "role": "agent",
+        {"username": "andrea", "email": None, "display_name": "Andrea Azzarito", "role": "agent",
          "password": os.environ.get("SEED_ANDREA_PASSWORD", "Andrea1606!")},
-        # Admin che effettua il login tramite email (fix 401 su deploy Render).
         {"username": SEED_ADMIN_EMAIL, "email": SEED_ADMIN_EMAIL,
-         "display_name": "Umberto Rodomisto", "role": "admin",
-         "password": SEED_ADMIN_PASSWORD},
+         "display_name": "Umberto Rodomisto", "role": "admin", "password": SEED_ADMIN_PASSWORD},
     ]
-    for s in seeds:
-        existing = await db.users.find_one({"username": s["username"]})
-        if not existing:
-            await db.users.insert_one({
-                "id": str(uuid.uuid4()),
-                "username": s["username"],
-                "email": s.get("email"),
-                "display_name": s["display_name"],
-                "role": s["role"],
-                "hashed_password": hash_pw(s["password"]),
-                "is_active": True,
-                "created_at": now_utc(),
-            })
-        else:
-            updates = {"role": s["role"], "is_active": True}
-            if s.get("email"):
-                updates["email"] = s["email"]
-            if not verify_pw(s["password"], existing.get("hashed_password", "")):
-                updates["hashed_password"] = hash_pw(s["password"])
-            await db.users.update_one({"username": s["username"]}, {"$set": updates})
+    for s in accounts:
+        try:
+            existing = await db.users.find_one({"username": s["username"]})
+            if existing is None:
+                await db.users.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "username": s["username"],
+                    "email": s["email"],
+                    "display_name": s["display_name"],
+                    "role": s["role"],
+                    "hashed_password": hash_pw(s["password"]),
+                    "is_active": True,
+                    "created_at": now_utc(),
+                })
+                logger.info("ADMIN SEED: CREATO utente '%s' (ruolo %s) password '%s'", s["username"], s["role"], s["password"])
+            else:
+                updates = {"role": s["role"], "is_active": True}
+                if s["email"]:
+                    updates["email"] = s["email"]
+                if not verify_pw(s["password"], existing.get("hashed_password", "")):
+                    updates["hashed_password"] = hash_pw(s["password"])
+                    logger.info("ADMIN SEED: password di '%s' AGGIORNATA forzatamente a '%s'", s["username"], s["password"])
+                else:
+                    logger.info("ADMIN SEED: utente '%s' gia presente, password corretta", s["username"])
+                await db.users.update_one({"username": s["username"]}, {"$set": updates})
 
-    logger.info("=== SEED UTENTI: credenziali di accesso attive ===")
-    for s in seeds:
-        logger.info(
-            "LOGIN -> identificativo: '%s' | password: '%s' | ruolo: %s",
-            s["username"], s["password"], s["role"],
-        )
-    logger.info("Il login accetta sia lo username sia l'email (senza distinzione maiuscole/spazi).")
+            check = await db.users.find_one({"username": s["username"]})
+            ok = bool(check and verify_pw(s["password"], check.get("hashed_password", "")))
+            logger.info("ADMIN SEED: verifica accesso '%s' / '%s' -> %s", s["username"], s["password"], "OK" if ok else "FALLITA")
+        except Exception as e:
+            logger.exception("ADMIN SEED: errore sull'utente '%s': %s", s["username"], e)
 
+    logger.info("=== ADMIN SEED COMPLETATO — usa una di queste combinazioni (username o email): ===")
+    for s in accounts:
+        logger.info("LOGIN -> '%s' | password '%s' | ruolo %s", s["username"], s["password"], s["role"])
+
+
+async def seed():
     for i, name in enumerate(seed_data.COMPANIES):
         existing = await db.companies.find_one({"name": name})
         if not existing:
@@ -470,7 +484,13 @@ async def seed_recurrences():
 
 @app.on_event("startup")
 async def on_startup():
-    await seed()
+    # L'admin viene garantito PER PRIMO e in modo isolato: anche se il seed
+    # completo dovesse fallire, il login amministratore resta funzionante.
+    await ensure_admin_users()
+    try:
+        await seed()
+    except Exception as e:
+        logger.exception("SEED completo fallito (l'admin resta comunque attivo): %s", e)
 
 
 @app.on_event("shutdown")

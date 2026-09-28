@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 12 (2026-09-28) — ensure_admin_users() a ogni avvio (fix 401 Render definitivo)
+- Estratta la logica utenti in `ensure_admin_users()` chiamata PER PRIMA in on_startup, isolata in try/except (anche se il seed completo fallisce, l'admin resta attivo). create_index("username") ora in try/except (una collezione con duplicati non blocca più il seed).
+- Per ogni account (umberto/Umberto2774!, andrea/Andrea1606!, email/2774_aprI): crea se assente, altrimenti forza role=admin/agent + is_active + AGGIORNA la password se diversa. Poi esegue una verifica di accesso e logga l'esito ("ADMIN SEED: verifica accesso ... -> OK") e le combinazioni utilizzabili ("LOGIN -> ...").
+- Login già accetta username O email (iter11). Verificato via curl: login 200 per umberto e per email; log ADMIN SEED corretti.
+- Diagnostica Render: se il 401 persiste, controllare nei log di Render la presenza delle righe "ADMIN SEED"; se assenti = codice/istanza non aggiornata; se presenti con verifica OK ma login 401 = richiesta/DB errati.
+
 ## Iter 11 (2026-09-28) — Login username OR email + log credenziali (debug Render 401)
 - Login (`POST /api/auth/login`) ora cerca l'utente con `$or` su `username` ED `email` (case-insensitive, strip). Sia 'umberto' sia l'email accedono. Token subject resta user["username"].
 - Aggiunti log a livello INFO all'avvio (seed) che stampano le combinazioni identificativo/password/ruolo attive → visibili nei log del server (utile per debug su Render). Aggiunti anche log su login fallito (utente non trovato / password errata).
