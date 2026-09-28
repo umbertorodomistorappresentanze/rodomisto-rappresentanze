@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 13 (2026-09-28) — Web app pubblica su hosting statico (Vercel/Netlify) verso backend Render
+- Frontend legge il backend da `process.env.EXPO_PUBLIC_BACKEND_URL` (api.ts, appende `/api`).
+- Creato `frontend/.env.production` con `EXPO_PUBLIC_BACKEND_URL=https://rodomisto-backend.onrender.com` → le build di produzione (`expo export -p web`) puntano a Render senza toccare il `.env` di anteprima.
+- Build web generata in `/app/frontend/dist` (SPA, output:single) con l'URL Render incorporato nel bundle (verificato). Pronta per hosting statico / drag&drop.
+- Config hosting: `frontend/vercel.json` (buildCommand `npx expo export -p web`, outputDirectory `dist`, rewrites SPA → /index.html) e `frontend/netlify.toml` (command/publish/redirect SPA + EXPO_PUBLIC_BACKEND_URL). Base directory da impostare = `frontend`.
+- Verificato: login su https://rodomisto-backend.onrender.com/api/auth/login (umberto/2774_aprI) → 200; preflight CORS riflette l'Origin, allow-credentials true. CORS backend = "*" (JWT in header, no cookie).
+
 ## Iter 12 (2026-09-28) — ensure_admin_users() a ogni avvio (fix 401 Render definitivo)
 - Estratta la logica utenti in `ensure_admin_users()` chiamata PER PRIMA in on_startup, isolata in try/except (anche se il seed completo fallisce, l'admin resta attivo). create_index("username") ora in try/except (una collezione con duplicati non blocca più il seed).
 - Per ogni account (umberto/Umberto2774!, andrea/Andrea1606!, email/2774_aprI): crea se assente, altrimenti forza role=admin/agent + is_active + AGGIORNA la password se diversa. Poi esegue una verifica di accesso e logga l'esito ("ADMIN SEED: verifica accesso ... -> OK") e le combinazioni utilizzabili ("LOGIN -> ...").

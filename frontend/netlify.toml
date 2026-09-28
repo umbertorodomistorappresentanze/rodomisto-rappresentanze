@@ -1,0 +1,17 @@
+# Config per pubblicare la web app (Expo Web / React Native Web) su Netlify.
+# NOTA: imposta "Base directory" = frontend nelle impostazioni del sito Netlify,
+# oppure sposta questo file nella cartella da cui Netlify esegue la build.
+
+[build]
+  command = "npx expo export -p web"
+  publish = "dist"
+
+[build.environment]
+  # URL di produzione del backend su Render (necessario a build time).
+  EXPO_PUBLIC_BACKEND_URL = "https://rodomisto-backend.onrender.com"
+
+# SPA fallback: tutte le rotte servono index.html (routing lato client).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
