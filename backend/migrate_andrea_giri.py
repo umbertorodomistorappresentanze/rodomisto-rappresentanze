@@ -82,6 +82,14 @@ r = db.clients.update_many(
 )
 print("clienti di Andrea residui -> Da Verificare:", r.modified_count)
 
+# 5) Pulizia nota di prova "TEST_NOTE" sul cliente 3 Erre Srl (soft-delete).
+TRE_ERRE_ID = "8231a742-8d0f-4ea7-ac31-5ce340262567"
+rn = db.events.update_many(
+    {"client_id": TRE_ERRE_ID, "type": "note", "note_text": "TEST_NOTE", "deleted_at": None},
+    {"$set": {"deleted_at": now}},
+)
+print("nota TEST_NOTE rimossa (3 Erre):", rn.modified_count)
+
 print("\n=== RISULTATO: giri di Andrea ===")
 for g in db.giri.find({"agent": "andrea", "active": True}, {"_id": 0}).sort("order", 1):
     n = db.clients.count_documents({"agent": "andrea", "giro_id": g["id"], "deleted_at": None})

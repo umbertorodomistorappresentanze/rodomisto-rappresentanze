@@ -1,5 +1,18 @@
 # AgendaVisite — PRD
 
+## Iter 16 (2026-10-02) — Filtri avanzati Storico (produttore + ricerca cliente)
+- /storico: aggiunta BARRA DI RICERCA cliente (testID sto-search, placeholder "Cerca cliente per nome o comune…", clear sto-search-clear) con match case/accento-insensibile (NFD) su ragione sociale/comune.
+- /storico: aggiunta riga ORIZZONTALE scrollabile di chip PRODUTTORI (sto-prod-all "Tutti i produttori" + sto-prod-<Azienda>), popolata SOLO con i produttori presenti nelle attività caricate (ordinati come /api/companies). Filtro client-side su company_name.
+- Filtraggio tutto client-side sui dati già caricati da GET /api/activities (nessuna modifica backend). Compatibile e combinabile con filtri tipo (sto-type-*) e utente (sto-scope-*, solo admin). Raggruppamento per giorno invariato.
+- Nota: la riga produttori si nasconde quando il filtro tipo attivo produce attività senza company_name (es. Incassi su 3 Erre). Comportamento corretto da spec.
+- Verificato: testing_agent iter10 PASS (frontend-only). Dati preview: ~101 attività (Librandi 70, Serracavallo 3, Cala 2).
+
+## Iter 15 (2026-10-02) — Finalizzazione: nota TEST_NOTE rimossa, script migrazione completo, pulizia preview
+- Rimossa (soft-delete) la nota "TEST_NOTE" dal cliente 3 Erre Srl (preview). Aggiunta la stessa pulizia dentro `backend/migrate_andrea_giri.py` (step 5) così un'unica esecuzione fa migrazione giri + rimozione nota.
+- `migrate_andrea_giri.py` verificato idempotente. Legge MONGO_URL/DB_NAME da env → eseguibile su Atlas (DB: route-manager-126) dall'utente.
+- Pulizia preview: eliminati 181 clienti artefatto dei test (prefisso TEST_). I conteggi preview (umberto ~576, andrea ~85) differiscono leggermente dagli originali per via delle mutazioni dei test automatici su preview; la PRODUZIONE Atlas è intatta. NON ripristinati 5 clienti soft-deleted perché includono duplicati/eliminazioni volontarie note (es. "La conca d'oro" doppio).
+- Utente NON condivide la stringa Atlas: eseguirà lui lo script in produzione e farà "Save to GitHub" + ripubblicazione dal pannello Deployment mantenendo il DB di produzione esistente. Giri per-agente nel codice sono retro-compatibili (giri legacy senza campo agent trattati come di Umberto).
+
 ## Iter 14 (2026-10-02) — Layout/ordine aziende, GIRI PER-AGENTE, permessi giri Andrea
 - #1 Aziende: bug layout risolto (pannello ordine/incasso/sospeso ora usa BottomSheetScrollView → scroll completo, ultima azienda raggiungibile). Nuovo ordine fisso in `GET /api/companies` via COMPANY_PRIORITY (Librandi, Serracavallo, Pellegrini, Villani, Menù, Cala, Mazzetti d'Altavilla, Toso, Mosnel, Tramin, Pio Cesare, Biondi Santi, Piper-Heidsieck, Bonfissuto, Foss Marai, Isole e Olena); aziende TEST_* disattivate in preview.
 - #2 GIRI PER-AGENTE: aggiunto campo `agent` ai giri. `list_giri`: Andrea vede `agent=='andrea'`, gli altri `agent != 'andrea'` (compresi giri legacy senza campo). Migrazione dati (migrate_andrea_giri.py): 7 giri esistenti → agent='umberto' (INVARIATI). Giri di Andrea creati + clienti spostati: Guardavalle(4)→"Lamezia Terme → San Vito"; Falerna(54)→"Lamezia Terme"; +"Lamezia Terme → Tiriolo" e "…Nocera Terinese" (vuoti); Lamezia→Vibo(20) e Vibo→Ricadi(6) in giri propri di Andrea. 1 Sila + 5 senza giro → Da Verificare (6). Umberto 577 clienti invariati, Andrea 90 (84 assegnati + 6 Da Verificare).
