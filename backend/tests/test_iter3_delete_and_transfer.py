@@ -237,14 +237,21 @@ class TestGiriReorder:
         api.put(f"{BASE_URL}/api/giri/{gid}",
                 json={"localities": original}, headers=umberto_headers)
 
-    def test_agent_cannot_edit_giro(self, api, andrea_headers):
-        # andrea should get 403 on PUT /giri
-        giri_resp = requests.get(
+    def test_agent_cannot_edit_giro(self, api, andrea_headers, umberto_headers):
+        # Andrea PUÒ modificare i PROPRI giri, ma NON quelli di Umberto.
+        ga = requests.get(
             f"{BASE_URL}/api/giri",
-            headers={"Authorization": andrea_headers["Authorization"]})
-        assert giri_resp.status_code == 200
-        gid = giri_resp.json()[0]["id"]
-        r = requests.put(f"{BASE_URL}/api/giri/{gid}",
-                         json={"localities": ["X"]},
-                         headers=andrea_headers)
-        assert r.status_code == 403
+            headers={"Authorization": andrea_headers["Authorization"]}).json()
+        assert len(ga) > 0
+        own_gid = ga[0]["id"]
+        r_own = requests.put(f"{BASE_URL}/api/giri/{own_gid}",
+                             json={"localities": ["X"]},
+                             headers=andrea_headers)
+        assert r_own.status_code == 200
+        gu = requests.get(
+            f"{BASE_URL}/api/giri",
+            headers={"Authorization": umberto_headers["Authorization"]}).json()
+        r_umb = requests.put(f"{BASE_URL}/api/giri/{gu[0]['id']}",
+                             json={"localities": ["X"]},
+                             headers=andrea_headers)
+        assert r_umb.status_code == 403

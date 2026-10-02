@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 14 (2026-10-02) — Layout/ordine aziende, GIRI PER-AGENTE, permessi giri Andrea
+- #1 Aziende: bug layout risolto (pannello ordine/incasso/sospeso ora usa BottomSheetScrollView → scroll completo, ultima azienda raggiungibile). Nuovo ordine fisso in `GET /api/companies` via COMPANY_PRIORITY (Librandi, Serracavallo, Pellegrini, Villani, Menù, Cala, Mazzetti d'Altavilla, Toso, Mosnel, Tramin, Pio Cesare, Biondi Santi, Piper-Heidsieck, Bonfissuto, Foss Marai, Isole e Olena); aziende TEST_* disattivate in preview.
+- #2 GIRI PER-AGENTE: aggiunto campo `agent` ai giri. `list_giri`: Andrea vede `agent=='andrea'`, gli altri `agent != 'andrea'` (compresi giri legacy senza campo). Migrazione dati (migrate_andrea_giri.py): 7 giri esistenti → agent='umberto' (INVARIATI). Giri di Andrea creati + clienti spostati: Guardavalle(4)→"Lamezia Terme → San Vito"; Falerna(54)→"Lamezia Terme"; +"Lamezia Terme → Tiriolo" e "…Nocera Terinese" (vuoti); Lamezia→Vibo(20) e Vibo→Ricadi(6) in giri propri di Andrea. 1 Sila + 5 senza giro → Da Verificare (6). Umberto 577 clienti invariati, Andrea 90 (84 assegnati + 6 Da Verificare).
+- #3 Permessi giri: create/update/delete giri ora per `get_current_user` con ownership (`_can_edit_giro`): Andrea gestisce SOLO i propri giri (crea/rinomina/elimina), 403 sui giri di Umberto. Aggiunto DELETE /giri/{id} (blocca se contiene clienti). Tab "Giri" ora visibile anche ad Andrea.
+- Test: 123 passati, 1 fallito PRE-ESISTENTE (test_giri_exact_order: atteso 'Catanzaro → Altilia' vs dato 'Catanzaro → Lamezia Terme → Falerna', anomalia dati storica, non legata a queste modifiche). Corretto bug test (test_sospesi `_cleanup_test_events` faceva hard-delete di TUTTI gli eventi di un cliente → protetti gli eventi preesistenti/recuperati). Ripristinati i 7 eventi di "3 erre Srl".
+- ATLAS/Render: le modifiche CODICE arrivano con push+redeploy; la MIGRAZIONE DATI va eseguita su Atlas lanciando backend/migrate_andrea_giri.py (con MONGO_URL/DB_NAME di Atlas).
+
 ## Iter 13 (2026-09-28) — Web app pubblica su hosting statico (Vercel/Netlify) verso backend Render
 - Frontend legge il backend da `process.env.EXPO_PUBLIC_BACKEND_URL` (api.ts, appende `/api`).
 - Creato `frontend/.env.production` con `EXPO_PUBLIC_BACKEND_URL=https://rodomisto-backend.onrender.com` → le build di produzione (`expo export -p web`) puntano a Render senza toccare il `.env` di anteprima.

@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { BottomSheetBackdrop, BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetView } from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ArrowBendUpLeft,
@@ -204,7 +204,7 @@ export const QuickActionsSheet = forwardRef<
         ) : null}
 
         {mode === "order" ? (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
+          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
             {!orderCompany ? (
               <>
                 <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
@@ -244,11 +244,11 @@ export const QuickActionsSheet = forwardRef<
                 ))}
               </>
             )}
-          </ScrollView>
+          </BottomSheetScrollView>
         ) : null}
 
         {mode === "collection" ? (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
+          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
             <AppText style={styles.hint}>Azienda di cui registrare l&apos;incasso (chiude il sospeso)</AppText>
             {companies.map((co) => (
               <Pressable
@@ -262,11 +262,11 @@ export const QuickActionsSheet = forwardRef<
                 <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
               </Pressable>
             ))}
-          </ScrollView>
+          </BottomSheetScrollView>
         ) : null}
 
         {mode === "suspension" ? (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.sm }}>
+          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
             <AppText style={styles.hint}>Azienda del sospeso da segnare come attivo</AppText>
             {companies.map((co) => (
               <Pressable
@@ -280,7 +280,7 @@ export const QuickActionsSheet = forwardRef<
                 <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
               </Pressable>
             ))}
-          </ScrollView>
+          </BottomSheetScrollView>
         ) : null}
 
         {mode === "reschedule" ? (

@@ -29,6 +29,9 @@ DB_NAME = os.environ.get("DB_NAME", "test_database")
 _mongo = MongoClient(MONGO_URL)
 _db = _mongo[DB_NAME]
 
+# Snapshot degli eventi preesistenti (seed/recuperati): MAI cancellati dai test.
+_PREEXISTING_EVENT_IDS = {e["id"] for e in _db.events.find({}, {"id": 1})}
+
 
 # ---------- helpers ----------
 def _first_giro_with_clients(api, headers, min_clients=1):
@@ -54,8 +57,8 @@ def _companies(api, headers):
 
 
 def _cleanup_test_events(client_id):
-    """Remove all events we may have created on the given client (test-only)."""
-    _db.events.delete_many({"client_id": client_id})
+    """Remove only events CREATED by tests, never pre-existing/seed/recovered data."""
+    _db.events.delete_many({"client_id": client_id, "id": {"$nin": list(_PREEXISTING_EVENT_IDS)}})
 
 
 # ============================================================
@@ -323,11 +326,11 @@ class TestAnagraficaImmutability:
 # ============================================================
 class TestPermissionsUnchanged:
     def test_andrea_cannot_operate_on_umberto_clients_indirectly(self, api, umberto_headers, andrea_headers):
-        # Andrea should only see own clients in /giri lists (already tested elsewhere).
-        # Sanity: /giri returns identical set for both (giri are shared metadata).
+        # Giri PER-AGENTE: gli insiemi di Umberto e Andrea sono disgiunti.
         gu = api.get(f"{BASE_URL}/api/giri", headers=umberto_headers).json()
         ga = api.get(f"{BASE_URL}/api/giri", headers=andrea_headers).json()
-        assert {g["id"] for g in gu} == {g["id"] for g in ga}
+        assert {g["id"] for g in gu}.isdisjoint({g["id"] for g in ga})
+        assert len(ga) >= 1
 
     def test_recurrences_still_two_companies(self, api, umberto_headers):
         r = api.get(f"{BASE_URL}/api/recurrences", headers=umberto_headers)

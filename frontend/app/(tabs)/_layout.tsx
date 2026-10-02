@@ -3,15 +3,12 @@ import { Tabs } from "expo-router";
 import { GearSix, Gift, House, MapTrifold, SealQuestion } from "phosphor-react-native";
 
 import { fonts, useTheme } from "@/src/theme";
-import { useAuth } from "@/src/auth";
 
 const isIOS26 =
   Platform.OS === "ios" && parseInt(String(Platform.Version), 10) >= 26;
 
 export default function TabsLayout() {
   const { colors } = useTheme();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
 
   if (isIOS26) {
     const {
@@ -29,12 +26,10 @@ export default function TabsLayout() {
           <Icon sf="questionmark.circle" />
           <Label>Da Verificare</Label>
         </NativeTabs.Trigger>
-        {isAdmin ? (
-          <NativeTabs.Trigger name="giri">
-            <Icon sf="map" />
-            <Label>Giri</Label>
-          </NativeTabs.Trigger>
-        ) : null}
+        <NativeTabs.Trigger name="giri">
+          <Icon sf="map" />
+          <Label>Giri</Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="ricorrenze">
           <Icon sf="gift" />
           <Label>Ricorrenze</Label>
@@ -80,7 +75,6 @@ export default function TabsLayout() {
         name="giri"
         options={{
           title: "Giri",
-          href: isAdmin ? undefined : null,
           tabBarIcon: ({ color }) => <MapTrifold size={24} color={color} weight="fill" />,
         }}
       />

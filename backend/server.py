@@ -541,10 +541,23 @@ async def require_admin(user=Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Companies
 # ---------------------------------------------------------------------------
+# Ordine di priorità richiesto per l'elenco aziende/produttori.
+COMPANY_PRIORITY = [
+    "Librandi", "Serracavallo", "Pellegrini", "Villani", "Menù", "Cala",
+    "Mazzetti d'Altavilla", "Toso", "Mosnel", "Tramin", "Pio Cesare",
+    "Biondi Santi", "Piper-Heidsieck", "Bonfissuto", "Foss Marai", "Isole e Olena",
+]
+_COMPANY_PRIORITY_INDEX = {name: i for i, name in enumerate(COMPANY_PRIORITY)}
+
+
 @api.get("/companies")
 async def list_companies(include_inactive: bool = False, user=Depends(get_current_user)):
     q = {} if include_inactive else {"active": True}
-    docs = await db.companies.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
+    docs = await db.companies.find(q, {"_id": 0}).to_list(1000)
+    docs.sort(key=lambda d: (
+        _COMPANY_PRIORITY_INDEX.get(d.get("name"), len(COMPANY_PRIORITY)),
+        d.get("name", "").lower(),
+    ))
     return docs
 
 
@@ -583,19 +596,32 @@ async def update_company(company_id: str, body: CompanyUpdate, user=Depends(requ
 @api.get("/giri")
 async def list_giri(include_inactive: bool = False, user=Depends(get_current_user)):
     q = {} if include_inactive else {"active": True}
+    # Giri per-agente: Andrea vede solo i propri; gli altri (Umberto/admin) vedono
+    # i giri non appartenenti ad Andrea (inclusi quelli storici senza campo agent).
+    if user["username"] == "andrea":
+        q["agent"] = "andrea"
+    else:
+        q["agent"] = {"$ne": "andrea"}
     docs = await db.giri.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
     return docs
 
 
+def _can_edit_giro(user, giro) -> bool:
+    is_andrea_user = user["username"] == "andrea"
+    is_andrea_giro = giro.get("agent") == "andrea"
+    return is_andrea_user == is_andrea_giro
+
+
 @api.post("/giri")
-async def create_giro(body: GiroCreate, user=Depends(require_admin)):
+async def create_giro(body: GiroCreate, user=Depends(get_current_user)):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Nome giro obbligatorio")
-    last = await db.giri.find_one({}, {"_id": 0}, sort=[("order", -1)])
+    owner = "andrea" if user["username"] == "andrea" else user["username"]
+    last = await db.giri.find_one({"agent": owner}, {"_id": 0}, sort=[("order", -1)])
     order = (last["order"] + 1) if last else 0
     doc = {"id": str(uuid.uuid4()), "name": name, "localities": body.localities,
-           "order": order, "active": True, "created_at": now_utc()}
+           "order": order, "active": True, "agent": owner, "created_at": now_utc()}
     await db.giri.insert_one(doc)
     doc.pop("_id", None)
     doc.pop("created_at", None)
@@ -603,15 +629,33 @@ async def create_giro(body: GiroCreate, user=Depends(require_admin)):
 
 
 @api.put("/giri/{giro_id}")
-async def update_giro(giro_id: str, body: GiroUpdate, user=Depends(require_admin)):
+async def update_giro(giro_id: str, body: GiroUpdate, user=Depends(get_current_user)):
+    giro = await db.giri.find_one({"id": giro_id}, {"_id": 0})
+    if not giro:
+        raise HTTPException(status_code=404, detail="Giro non trovato")
+    if not _can_edit_giro(user, giro):
+        raise HTTPException(status_code=403, detail="Non puoi modificare questo giro")
     update = {k: v for k, v in body.dict().items() if v is not None}
     if not update:
         raise HTTPException(status_code=400, detail="Nessun dato")
-    res = await db.giri.update_one({"id": giro_id}, {"$set": update})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Giro non trovato")
+    await db.giri.update_one({"id": giro_id}, {"$set": update})
     doc = await db.giri.find_one({"id": giro_id}, {"_id": 0})
     return doc
+
+
+@api.delete("/giri/{giro_id}")
+async def delete_giro(giro_id: str, user=Depends(get_current_user)):
+    giro = await db.giri.find_one({"id": giro_id}, {"_id": 0})
+    if not giro:
+        raise HTTPException(status_code=404, detail="Giro non trovato")
+    if not _can_edit_giro(user, giro):
+        raise HTTPException(status_code=403, detail="Non puoi eliminare questo giro")
+    # Sicurezza: non eliminare se contiene ancora clienti (vanno prima riassegnati).
+    n = await db.clients.count_documents({"giro_id": giro_id, "agent": user["username"], "deleted_at": None})
+    if n > 0:
+        raise HTTPException(status_code=400, detail=f"Il giro contiene {n} clienti: spostali prima di eliminarlo")
+    await db.giri.update_one({"id": giro_id}, {"$set": {"active": False}})
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
