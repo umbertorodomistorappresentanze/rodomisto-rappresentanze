@@ -829,7 +829,36 @@ async def da_verificare(user=Depends(get_current_user)):
         q["agent"] = user["username"]
     docs = await db.clients.find(q, {"_id": 0}).to_list(5000)
     docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
-    return [client_public(d) for d in docs]
+
+    # Possibili duplicati: altri clienti ATTIVI con la stessa Partita IVA (normalizzata).
+    def _np(s):
+        return re.sub(r"\s+", "", (s or "").strip().upper())
+
+    from collections import defaultdict
+    allc = await db.clients.find(
+        {"deleted_at": None}, {"_id": 0, "id": 1, "ragione_sociale": 1, "citta": 1, "agent": 1, "extra": 1}
+    ).to_list(20000)
+    by_piva = defaultdict(list)
+    for c in allc:
+        p = _np((c.get("extra") or {}).get("partita_iva"))
+        if p and len(p) >= 5:
+            by_piva[p].append(c)
+
+    out = []
+    for d in docs:
+        pub = client_public(d)
+        p = _np((d.get("extra") or {}).get("partita_iva"))
+        dups = []
+        if p and len(p) >= 5:
+            dups = [
+                {"id": c["id"], "ragione_sociale": c.get("ragione_sociale", ""),
+                 "citta": c.get("citta", ""), "agent": c.get("agent", "")}
+                for c in by_piva.get(p, []) if c["id"] != d["id"]
+            ]
+        pub["partita_iva"] = (d.get("extra") or {}).get("partita_iva", "")
+        pub["duplicates"] = dups
+        out.append(pub)
+    return out
 
 
 VALID_AGENTS = {"umberto", "andrea"}
@@ -922,6 +951,55 @@ async def delete_client(client_id: str, user=Depends(require_admin)):
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     return {"ok": True}
+
+
+class MergeClientBody(BaseModel):
+    target_id: str
+
+
+async def _merge_client_into(source_id: str, target_id: str):
+    """Riassegna eventi e ricorrenze dal cliente sorgente al target, completa i
+    campi mancanti del target e azzera needs_review. NON cancella il sorgente."""
+    await db.events.update_many(
+        {"client_id": source_id, "deleted_at": None}, {"$set": {"client_id": target_id}}
+    )
+    async for m in db.recurrence_members.find({"client_id": source_id}):
+        exists = await db.recurrence_members.find_one(
+            {"client_id": target_id, "company": m.get("company"), "period": m.get("period")}
+        )
+        if exists:
+            await db.recurrence_members.delete_one({"_id": m["_id"]})
+        else:
+            await db.recurrence_members.update_one({"_id": m["_id"]}, {"$set": {"client_id": target_id}})
+    src = await db.clients.find_one({"id": source_id}, {"_id": 0}) or {}
+    tgt = await db.clients.find_one({"id": target_id}, {"_id": 0}) or {}
+    fill = {}
+    for f in ["telefono", "email", "indirizzo", "cap", "citta", "zona", "provincia", "permanent_note"]:
+        if not (tgt.get(f) or "").strip() and (src.get(f) or "").strip():
+            fill[f] = src[f]
+    textra = dict(tgt.get("extra") or {})
+    for k, v in (src.get("extra") or {}).items():
+        if not (textra.get(k) or "") and v:
+            textra[k] = v
+    textra["needs_review"] = False
+    fill["extra"] = textra
+    await db.clients.update_one({"id": target_id}, {"$set": fill})
+
+
+@api.post("/clients/{client_id}/merge")
+async def merge_client(client_id: str, body: MergeClientBody, user=Depends(require_admin)):
+    """Fonde il cliente {client_id} (sorgente) nel cliente {target_id}: lo storico
+    passa al target, il sorgente viene soft-deleted. Solo admin."""
+    if client_id == body.target_id:
+        raise HTTPException(status_code=400, detail="Sorgente e destinazione coincidono")
+    src = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
+    tgt = await db.clients.find_one({"id": body.target_id, "deleted_at": None}, {"_id": 0})
+    if not src or not tgt:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    await _merge_client_into(client_id, body.target_id)
+    await db.clients.update_one({"id": client_id}, {"$set": {"deleted_at": now_utc()}})
+    doc = await db.clients.find_one({"id": body.target_id}, {"_id": 0})
+    return client_public(doc)
 
 
 @api.get("/clients/{client_id}/history")

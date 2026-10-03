@@ -1,7 +1,9 @@
 import { Platform } from "react-native";
 import { Tabs } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { GearSix, Gift, House, MapTrifold, SealQuestion } from "phosphor-react-native";
 
+import { apiGet, Suspension } from "@/src/api";
 import { fonts, useTheme } from "@/src/theme";
 
 const isIOS26 =
@@ -9,6 +11,13 @@ const isIOS26 =
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+
+  const susQuery = useQuery({
+    queryKey: ["suspensions", "all"],
+    queryFn: () => apiGet<Suspension[]>("/suspensions?scope=all"),
+    staleTime: 60_000,
+  });
+  const susCount = susQuery.data?.length ?? 0;
 
   if (isIOS26) {
     const {
@@ -62,6 +71,8 @@ export default function TabsLayout() {
         options={{
           title: "Oggi",
           tabBarIcon: ({ color }) => <House size={24} color={color} weight="fill" />,
+          tabBarBadge: susCount > 0 ? susCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.error, color: colors.onBrand, fontSize: 10 },
         }}
       />
       <Tabs.Screen

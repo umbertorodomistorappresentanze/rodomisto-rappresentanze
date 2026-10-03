@@ -105,3 +105,9 @@
 - Backend: GET /api/activities nuovi param from_date/to_date (YYYY-MM-DD, giorno locale Rome); limit cap alzato a 2000. Nuovo GET /api/suspensions?scope= (overdue + due_soon entro 15gg, per-agente).
 - Frontend: /storico filtro periodo (chip mesi ultimi 12 + "Personalizzato" con Da/A GG/MM/AAAA + Applica). Nuova schermata /sospesi. Dashboard: card alert sospesi (testID sospesi-alert). Link in Altro (menu-sospesi).
 - needs_retesting: true. Credenziali: umberto/Umberto2774!, andrea/Andrea1606!.
+
+## Iter 21 (2026-10-03) — Unisci/Elimina duplicati in Da Verificare + badge sospesi su tab
+- Backend: GET /api/clients/da-verificare ora include campi partita_iva e duplicates[] (altri clienti attivi con stessa P.IVA normalizzata). Nuovo POST /api/clients/{id}/merge {target_id} (admin): riassegna eventi+ricorrenze a target, completa campi mancanti, azzera needs_review, soft-delete sorgente.
+- Frontend: da-verificare mostra P.IVA + avviso "Stessa P.IVA di X" + pulsanti Unisci (testID verify-merge-<id>) ed Elimina (verify-delete-<id>) per admin, con conferma cross-platform. Tab "Oggi" ha tabBarBadge con conteggio sospesi (/suspensions). Card promemoria in home invariata.
+- Dati preview: 9 gruppi duplicati (18 record) flaggati needs_review, 2 sospesi attivi (badge=2).
+- needs_retesting: true.

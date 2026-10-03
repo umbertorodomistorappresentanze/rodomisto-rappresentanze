@@ -106,6 +106,8 @@ export type Client = {
   status?: "da_visitare" | "gestito";
   handled_today?: boolean;
   suspensions?: string[];
+  partita_iva?: string;
+  duplicates?: { id: string; ragione_sociale: string; citta: string; agent: string }[];
 };
 export type PaymentMode = { key: string; label: string; days: number | null };
 

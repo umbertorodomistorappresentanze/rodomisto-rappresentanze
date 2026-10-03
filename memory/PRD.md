@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 21 (2026-10-03) — Unisci/Elimina duplicati rapido + badge sospesi su tab
+- DA VERIFICARE: GET /api/clients/da-verificare ora espone partita_iva + duplicates[] (clienti attivi con stessa P.IVA normalizzata). Nuovo POST /api/clients/{id}/merge {target_id} (admin): riassegna eventi+ricorrenze→target, completa campi mancanti, azzera needs_review, soft-delete sorgente. Helper _merge_client_into.
+- Frontend da-verificare.tsx: card con P.IVA, avviso "Stessa P.IVA di X", pulsanti Unisci (verify-merge-<id>) / Elimina (verify-delete-<id>) solo admin + conferma cross-platform; "Assegna" invariato.
+- BADGE: (tabs)/_layout.tsx query /suspensions → tabBarBadge sul tab "Oggi" (conteggio sospesi, rosso).
+- Verificato: testing_agent iter12 backend 11/11 pytest + frontend admin/agente OK (badge 2, permessi admin-only, flussi unisci/elimina). Nota: i test hanno consumato 3 record duplicati nel SEED di preview (produzione intatta).
+
 ## Iter 20 (2026-10-03) — Filtro periodo Storico + Promemoria Sospesi + merge duplicati sicuri
 - FILTRO PERIODO Storico: GET /api/activities nuovi param from_date/to_date (YYYY-MM-DD, giorno locale Rome, limite sup. esclusivo via parse_day_bound); limit cap 2000. Frontend /storico: chip ultimi 12 mesi (sto-month-YYYY-MM) + "Tutto il periodo" (sto-period-all) + "Personalizzato" (sto-period-custom) con campi Da/A GG/MM/AAAA + Applica (sto-custom-apply, validazione formato).
 - PROMEMORIA SOSPESI: nuovo GET /api/suspensions?scope= (kind overdue|due_soon entro DUE_SOON_DAYS=15, per-agente). Nuova schermata /sospesi (sezioni SOSPESI DA INCASSARE / INCASSI IN SCADENZA, scope admin, tap→scheda cliente). Card alert in dashboard (sospesi-alert) + voce in Altro (menu-sospesi).
