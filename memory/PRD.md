@@ -1,5 +1,10 @@
 # AgendaVisite — PRD
 
+## Iter 22 (2026-10-03) — Fix CORS per Web App Vercel
+- Root cause: CORSMiddleware aveva allow_credentials=True + allow_origins=["*"] → i browser rifiutano il wildcard con credenziali (login Vercel bloccato).
+- Fix (server.py fine file): allow_origins esplicito [vercel prod, localhost:3000/8081/19006] + allow_origin_regex r"https://([a-z0-9-]+\.)*(vercel\.app|emergentagent\.com)$", allow_credentials=True (riflette l'origine). Verificato con curl OPTIONS: ACAO riflette il dominio Vercel (prod e *-git-*.vercel.app), origine sconosciuta → nessun ACAO (bloccata).
+- AZIONE UTENTE: "Save to GitHub" + redeploy del backend su Render per applicare in produzione.
+
 ## Iter 21 (2026-10-03) — Unisci/Elimina duplicati rapido + badge sospesi su tab
 - DA VERIFICARE: GET /api/clients/da-verificare ora espone partita_iva + duplicates[] (clienti attivi con stessa P.IVA normalizzata). Nuovo POST /api/clients/{id}/merge {target_id} (admin): riassegna eventi+ricorrenze→target, completa campi mancanti, azzera needs_review, soft-delete sorgente. Helper _merge_client_into.
 - Frontend da-verificare.tsx: card con P.IVA, avviso "Stessa P.IVA di X", pulsanti Unisci (verify-merge-<id>) / Elimina (verify-delete-<id>) solo admin + conferma cross-platform; "Assegna" invariato.

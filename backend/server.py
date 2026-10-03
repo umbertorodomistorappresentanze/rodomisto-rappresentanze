@@ -1611,10 +1611,22 @@ async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user
 
 
 app.include_router(api)
+
+# CORS: elenco esplicito delle origini consentite (il wildcard "*" con
+# allow_credentials=True viene rifiutato dai browser). Copriamo il dominio
+# Vercel di produzione, i deploy di anteprima *.vercel.app, l'anteprima
+# Emergent e lo sviluppo locale.
+ALLOWED_ORIGINS = [
+    "https://rodomisto-rappresentanze-frontend.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:8081",
+    "http://localhost:19006",
+]
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*(vercel\.app|emergentagent\.com)$",
     allow_credentials=True,
-    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
