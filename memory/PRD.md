@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 17 (2026-10-03) — Conteggio clienti nei giri, ordinamento giri, script Atlas aggiornato
+- "0 località" FIX: `GET /api/giri` ora ritorna `client_count` per ogni giro (aggregazione clienti attivi per giro_id). Frontend `giri.tsx` e `select-giro.tsx` mostrano "N clienti" invece di "N località" (i giri di Andrea avevano localities vuote pur avendo clienti → ora corretto, es. Lamezia Terme = 54 clienti).
+- ORDINAMENTO giri impostato per-utente (campo order). Umberto era già corretto: Catanzaro e Limitrofi, Guardavalle, Lamezia→Vibo, Vibo→Ricadi, Catanzaro→Lamezia Terme→Falerna (pos.5, nome invariato su richiesta), Crotone, Sila Piccola. Andrea riordinato: Lamezia Terme, →Tiriolo, →San Vito, →Nocera Terinese, →Vibo Valentia, Vibo→Ricadi.
+- `backend/migrate_andrea_giri.py` aggiornato: ordini di creazione finali + nuovo STEP 6 che forza l'ordine esatto per-agente (idempotente, aggiorna anche i giri già esistenti su Atlas). Eseguito su preview con successo. L'utente deve rieseguirlo su Atlas (MONGO_URL/DB_NAME di produzione) per sincronizzare giri+ordine → risolve il disallineamento Web App Vercel.
+- VERCEL: config già corretta (`.env.production`/`vercel.json`/`netlify.toml` → EXPO_PUBLIC_BACKEND_URL = Render). Il disallineamento era dovuto alla migrazione NON ancora eseguita su Atlas, non alla config.
+- Verificato: API (client_count+order) via curl, screenshot select-giro come andrea (ordine + "N clienti" corretti). Lint OK.
+
 ## Iter 16 (2026-10-02) — Filtri avanzati Storico (produttore + ricerca cliente)
 - /storico: aggiunta BARRA DI RICERCA cliente (testID sto-search, placeholder "Cerca cliente per nome o comune…", clear sto-search-clear) con match case/accento-insensibile (NFD) su ragione sociale/comune.
 - /storico: aggiunta riga ORIZZONTALE scrollabile di chip PRODUTTORI (sto-prod-all "Tutti i produttori" + sto-prod-<Azienda>), popolata SOLO con i produttori presenti nelle attività caricate (ordinati come /api/companies). Filtro client-side su company_name.

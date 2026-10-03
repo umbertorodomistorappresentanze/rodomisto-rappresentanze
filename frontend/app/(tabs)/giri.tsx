@@ -81,7 +81,7 @@ export default function GiriScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <AppText weight="semibold" style={styles.name} numberOfLines={1}>{item.name}</AppText>
-                <AppText style={styles.meta}>{item.localities.length} località · tocca per modificare l&apos;ordine</AppText>
+                <AppText style={styles.meta}>{item.client_count ?? 0} clienti · tocca per modificare l&apos;ordine</AppText>
               </View>
               <DotsSixVertical size={22} color={colors.muted} weight="bold" />
             </Pressable>

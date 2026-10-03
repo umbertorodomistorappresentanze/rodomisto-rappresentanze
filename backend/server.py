@@ -603,6 +603,18 @@ async def list_giri(include_inactive: bool = False, user=Depends(get_current_use
     else:
         q["agent"] = {"$ne": "andrea"}
     docs = await db.giri.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
+    # Conteggio clienti attivi assegnati a ciascun giro (per la UI: "N clienti").
+    giro_ids = [g["id"] for g in docs]
+    counts: dict = {}
+    if giro_ids:
+        pipeline = [
+            {"$match": {"giro_id": {"$in": giro_ids}, "deleted_at": None}},
+            {"$group": {"_id": "$giro_id", "n": {"$sum": 1}}},
+        ]
+        async for row in db.clients.aggregate(pipeline):
+            counts[row["_id"]] = row["n"]
+    for g in docs:
+        g["client_count"] = counts.get(g["id"], 0)
     return docs
 
 

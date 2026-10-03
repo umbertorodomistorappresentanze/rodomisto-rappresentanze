@@ -49,10 +49,10 @@ LAMEZIA_VIBO = shared_id("Lamezia Terme → Vibo Valentia")
 VIBO_RICADI = shared_id("Vibo Valentia → Ricadi")
 SILA = shared_id("Catanzaro → Sila Piccola")
 
-# 2) Giri di Andrea
-g_sanvito = ensure_andrea_giro("Lamezia Terme → San Vito", 0)
-g_lamezia = ensure_andrea_giro("Lamezia Terme", 1)
-ensure_andrea_giro("Lamezia Terme → Tiriolo", 2)
+# 2) Giri di Andrea (ordine finale richiesto dall'utente)
+g_lamezia = ensure_andrea_giro("Lamezia Terme", 0)
+ensure_andrea_giro("Lamezia Terme → Tiriolo", 1)
+g_sanvito = ensure_andrea_giro("Lamezia Terme → San Vito", 2)
 ensure_andrea_giro("Lamezia Terme → Nocera Terinese", 3)
 g_lamvibo = ensure_andrea_giro("Lamezia Terme → Vibo Valentia", 4)
 g_vibric = ensure_andrea_giro("Vibo Valentia → Ricadi", 5)
@@ -89,6 +89,41 @@ rn = db.events.update_many(
     {"$set": {"deleted_at": now}},
 )
 print("nota TEST_NOTE rimossa (3 Erre):", rn.modified_count)
+
+# 6) ORDINAMENTO ESATTO dei giri (idempotente, per-agente, aggiorna anche i giri esistenti).
+UMBERTO_ORDER = [
+    "Catanzaro e Limitrofi",
+    "Catanzaro → Guardavalle",
+    "Lamezia Terme → Vibo Valentia",
+    "Vibo Valentia → Ricadi",
+    "Catanzaro → Lamezia Terme → Falerna",
+    "Catanzaro → Crotone",
+    "Catanzaro → Sila Piccola",
+]
+ANDREA_ORDER = [
+    "Lamezia Terme",
+    "Lamezia Terme → Tiriolo",
+    "Lamezia Terme → San Vito",
+    "Lamezia Terme → Nocera Terinese",
+    "Lamezia Terme → Vibo Valentia",
+    "Vibo Valentia → Ricadi",
+]
+
+def apply_order(names, agent):
+    # Umberto include i giri legacy senza campo agent (già normalizzati a 'umberto' nello step 1).
+    for idx, name in enumerate(names):
+        r = db.giri.update_many({"name": name, "agent": agent}, {"$set": {"order": idx}})
+        if r.matched_count == 0:
+            print(f"  (ordine {agent}: giro non trovato '{name}')")
+
+apply_order(UMBERTO_ORDER, "umberto")
+apply_order(ANDREA_ORDER, "andrea")
+print("ordinamento giri applicato (umberto + andrea)")
+
+print("\n=== RISULTATO: giri di Umberto ===")
+for g in db.giri.find({"agent": {"$ne": "andrea"}, "active": True}, {"_id": 0}).sort("order", 1):
+    n = db.clients.count_documents({"giro_id": g["id"], "deleted_at": None})
+    print(f"  {g['order']}  {g['name']:<38} clienti={n}")
 
 print("\n=== RISULTATO: giri di Andrea ===")
 for g in db.giri.find({"agent": "andrea", "active": True}, {"_id": 0}).sort("order", 1):

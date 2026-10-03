@@ -50,7 +50,7 @@ export default function SelectGiro() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <AppText weight="semibold" style={styles.name}>{g.name}</AppText>
-                  <AppText style={styles.meta}>{g.localities.length} località</AppText>
+                  <AppText style={styles.meta}>{g.client_count ?? 0} clienti</AppText>
                 </View>
                 {active ? <CheckCircle size={24} color={colors.brand} weight="fill" /> : null}
               </Pressable>

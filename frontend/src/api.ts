@@ -81,7 +81,7 @@ export async function loginRequest(username: string, password: string) {
 }
 
 // ---- Types ----
-export type Giro = { id: string; name: string; localities: string[]; order: number; active: boolean };
+export type Giro = { id: string; name: string; localities: string[]; order: number; active: boolean; client_count?: number };
 export type Company = { id: string; name: string; active: boolean; order: number };
 export type ClientExtra = Record<string, string>;
 export type Client = {
