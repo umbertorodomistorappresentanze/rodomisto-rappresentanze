@@ -1,7 +1,7 @@
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { CaretRight, FileXls, SignOut, Storefront, UserCircle } from "phosphor-react-native";
+import { Bell, CaretRight, FileXls, SignOut, Storefront, UserCircle } from "phosphor-react-native";
 
 import { useAuth } from "@/src/auth";
 import { AppText } from "@/src/components/ui";
@@ -32,6 +32,12 @@ export default function Impostazioni() {
           </View>
         </View>
 
+        <MenuItem
+          icon={<Bell size={22} color={colors.brand} weight="fill" />}
+          label="Promemoria sospesi"
+          onPress={() => router.push("/sospesi")}
+          testID="menu-sospesi"
+        />
         <MenuItem
           icon={<FileXls size={22} color={colors.brand} weight="fill" />}
           label="Statistiche / Esportazione"

@@ -41,10 +41,78 @@ export default function StoricoScreen() {
   const [scope, setScope] = useState<Scope>("all");
   const [producer, setProducer] = useState<string>("all");
   const [search, setSearch] = useState("");
+  // Periodo: "all" | "custom" | "YYYY-MM". range in formato 'YYYY-MM-DD' (o null = aperto).
+  const [periodSel, setPeriodSel] = useState<string>("all");
+  const [range, setRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
+  const [showCustom, setShowCustom] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [customErr, setCustomErr] = useState<string | null>(null);
+
+  // Ultimi 12 mesi come opzioni selezionabili.
+  const months = useMemo(() => {
+    const names = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+    const out: { key: string; label: string; from: string; to: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const mm = String(m + 1).padStart(2, "0");
+      const last = new Date(y, m + 1, 0).getDate();
+      out.push({
+        key: `${y}-${mm}`,
+        label: `${names[m]} ${String(y).slice(2)}`,
+        from: `${y}-${mm}-01`,
+        to: `${y}-${mm}-${String(last).padStart(2, "0")}`,
+      });
+    }
+    return out;
+  }, []);
+
+  function selectMonth(m: { key: string; from: string; to: string }) {
+    setPeriodSel(m.key);
+    setShowCustom(false);
+    setRange({ from: m.from, to: m.to });
+  }
+  function selectAll() {
+    setPeriodSel("all");
+    setShowCustom(false);
+    setRange({ from: null, to: null });
+  }
+  function applyCustom() {
+    const toIso = (s: string): string | null => {
+      const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!m) return null;
+      const [, dd, mm, yyyy] = m;
+      const d = Number(dd), mo = Number(mm);
+      if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+      return `${yyyy}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    };
+    const f = customFrom.trim() ? toIso(customFrom) : null;
+    const t = customTo.trim() ? toIso(customTo) : null;
+    if ((customFrom.trim() && !f) || (customTo.trim() && !t)) {
+      setCustomErr("Usa il formato GG/MM/AAAA");
+      return;
+    }
+    if (!f && !t) {
+      setCustomErr("Inserisci almeno una data");
+      return;
+    }
+    if (f && t && f > t) {
+      setCustomErr("La data iniziale è successiva a quella finale");
+      return;
+    }
+    setCustomErr(null);
+    setPeriodSel("custom");
+    setRange({ from: f, to: t });
+  }
+
+  const dateQS = `${range.from ? `&from_date=${range.from}` : ""}${range.to ? `&to_date=${range.to}` : ""}`;
 
   const query = useQuery({
-    queryKey: ["activities", scope, type, 500],
-    queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=${type}&limit=500`),
+    queryKey: ["activities", scope, type, 1000, range.from, range.to],
+    queryFn: () => apiGet<Activity[]>(`/activities?scope=${scope}&type=${type}&limit=1000${dateQS}`),
   });
 
   const companiesQuery = useQuery({
@@ -115,6 +183,68 @@ export default function StoricoScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.producerRow}
+        >
+          <Pressable testID="sto-period-all" onPress={selectAll} style={[styles.chip, periodSel === "all" && styles.chipOn]}>
+            <AppText weight="semibold" style={[styles.chipText, periodSel === "all" && styles.chipTextOn]}>Tutto il periodo</AppText>
+          </Pressable>
+          <Pressable
+            testID="sto-period-custom"
+            onPress={() => { setShowCustom((v) => !v); }}
+            style={[styles.chip, periodSel === "custom" && styles.chipOn]}
+          >
+            <AppText weight="semibold" style={[styles.chipText, periodSel === "custom" && styles.chipTextOn]}>Personalizzato</AppText>
+          </Pressable>
+          {months.map((m) => {
+            const on = periodSel === m.key;
+            return (
+              <Pressable key={m.key} testID={`sto-month-${m.key}`} onPress={() => selectMonth(m)} style={[styles.chip, on && styles.chipOn]}>
+                <AppText weight="semibold" style={[styles.chipText, on && styles.chipTextOn]}>{m.label}</AppText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {showCustom ? (
+          <View style={styles.customBox}>
+            <View style={styles.customRow}>
+              <View style={styles.customField}>
+                <AppText style={styles.customLabel}>Da</AppText>
+                <TextInput
+                  testID="sto-custom-from"
+                  value={customFrom}
+                  onChangeText={setCustomFrom}
+                  placeholder="GG/MM/AAAA"
+                  placeholderTextColor={colors.muted}
+                  style={styles.customInput}
+                  keyboardType="numbers-and-punctuation"
+                  autoCorrect={false}
+                />
+              </View>
+              <View style={styles.customField}>
+                <AppText style={styles.customLabel}>A</AppText>
+                <TextInput
+                  testID="sto-custom-to"
+                  value={customTo}
+                  onChangeText={setCustomTo}
+                  placeholder="GG/MM/AAAA"
+                  placeholderTextColor={colors.muted}
+                  style={styles.customInput}
+                  keyboardType="numbers-and-punctuation"
+                  autoCorrect={false}
+                />
+              </View>
+              <Pressable testID="sto-custom-apply" onPress={applyCustom} style={styles.applyBtn}>
+                <AppText weight="bold" style={styles.applyText}>Applica</AppText>
+              </Pressable>
+            </View>
+            {customErr ? <AppText style={styles.customErr}>{customErr}</AppText> : null}
+          </View>
+        ) : null}
 
         <View style={styles.chipRow}>
           {TYPE_OPTIONS.map((o) => {
@@ -203,6 +333,18 @@ const useStyles = makeStyles((c) => ({
   },
   searchInput: { flex: 1, fontFamily: "PlusJakarta-Medium", fontSize: 15, color: c.onSurface, paddingVertical: 0 },
   producerRow: { flexDirection: "row", gap: spacing.sm, paddingRight: spacing.lg },
+  customBox: { gap: spacing.xs },
+  customRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
+  customField: { flex: 1, gap: 2 },
+  customLabel: { fontSize: 11, color: c.onSurfaceTertiary, letterSpacing: 0.3 },
+  customInput: {
+    borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary,
+    borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44,
+    fontFamily: "PlusJakarta-Medium", fontSize: 14, color: c.onSurface,
+  },
+  applyBtn: { backgroundColor: c.brand, borderRadius: radius.md, paddingHorizontal: spacing.lg, height: 44, alignItems: "center", justifyContent: "center" },
+  applyText: { fontSize: 14, color: c.onBrand },
+  customErr: { fontSize: 12, color: c.error },
   chipRow: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
   chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary },
   chipOn: { backgroundColor: c.brand },

@@ -139,6 +139,18 @@ export type VisitEvent = {
   due_at?: string | null;
 };
 
+export type Suspension = {
+  client_id: string;
+  ragione_sociale: string;
+  citta: string;
+  agent: string;
+  giro_name: string | null;
+  company_name: string;
+  kind: "overdue" | "due_soon";
+  due_at: string | null;
+  since: string | null;
+};
+
 export type RecurrencePeriod = { key: string; label: string; start: string; end: string };
 export type RecurrenceDef = {
   id: string;

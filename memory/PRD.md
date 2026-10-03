@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 20 (2026-10-03) — Filtro periodo Storico + Promemoria Sospesi + merge duplicati sicuri
+- FILTRO PERIODO Storico: GET /api/activities nuovi param from_date/to_date (YYYY-MM-DD, giorno locale Rome, limite sup. esclusivo via parse_day_bound); limit cap 2000. Frontend /storico: chip ultimi 12 mesi (sto-month-YYYY-MM) + "Tutto il periodo" (sto-period-all) + "Personalizzato" (sto-period-custom) con campi Da/A GG/MM/AAAA + Applica (sto-custom-apply, validazione formato).
+- PROMEMORIA SOSPESI: nuovo GET /api/suspensions?scope= (kind overdue|due_soon entro DUE_SOON_DAYS=15, per-agente). Nuova schermata /sospesi (sezioni SOSPESI DA INCASSARE / INCASSI IN SCADENZA, scope admin, tap→scheda cliente). Card alert in dashboard (sospesi-alert) + voce in Altro (menu-sospesi).
+- Verificato: testing_agent iter11 backend 14/14 pytest + frontend 7/7. Nessun problema.
+- PULIZIA DUPLICATI: creato merge_duplicate_clients.py (merge SOLO se nome normalizzato identico; FORCE_MERGE per P.IVA confermate; riassegna eventi+ricorrenze, soft-delete dups). Fusi 3 gruppi confermati dall'utente (L'arte del dolce Srl, Grega kesa's srl, Bar Palermo di Palermo Giuseppe) su produzione+preview. Gli altri 9 gruppi ambigui (P.IVA uguale ma nomi diversi, spesso aziende diverse) NON fusi: su richiesta utente flaggati extra.needs_review=True (18 record) così compaiono in "Da Verificare" per revisione manuale in-app. Produzione: 638 clienti attivi.
+
 ## Iter 19 (2026-10-03) — Rinomina "Catanzaro → Altilia" + riempimento Da Verificare di Andrea
 - RINOMINA uniforme: il 5° giro di Umberto ora si chiama "Catanzaro → Altilia" in ENTRAMBI gli ambienti (preview: era "…Falerna"; produzione Atlas: era "…Lamezia Terme → Altilia"). migrate_andrea_giri.py aggiornato: rileva automaticamente il nome tra ["Catanzaro → Altilia", "…Lamezia Terme → Altilia", "…Falerna"].
 - RIEMPIMENTO Da Verificare: nuovo script idempotente `backend/fill_andrea_daverificare.py` (sposta per prefisso id, solo clienti andrea con giro_id=None, accoda in fondo). Mappatura confermata dall'utente:

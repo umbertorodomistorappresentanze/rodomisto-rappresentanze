@@ -3,9 +3,9 @@ import { Pressable, RefreshControl, SectionList, TextInput, View } from "react-n
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { CaretRight, ChartBar, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, X } from "phosphor-react-native";
+import { CaretRight, ChartBar, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, WarningCircle, X } from "phosphor-react-native";
 
-import { apiGet, Client, Company, Giro, PaymentMode } from "@/src/api";
+import { apiGet, Client, Company, Giro, PaymentMode, Suspension } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, EmptyState, Loading } from "@/src/components/ui";
 import { ClientRow } from "@/src/components/client-row";
@@ -32,6 +32,9 @@ export default function Dashboard() {
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiGet<Company[]>("/companies") });
   const paymentModesQuery = useQuery({ queryKey: ["payment-modes"], queryFn: () => apiGet<PaymentMode[]>("/payment-modes") });
+  const suspensionsQuery = useQuery({ queryKey: ["suspensions", "all"], queryFn: () => apiGet<Suspension[]>("/suspensions?scope=all") });
+  const susOverdue = (suspensionsQuery.data ?? []).filter((s) => s.kind === "overdue").length;
+  const susSoon = (suspensionsQuery.data ?? []).filter((s) => s.kind === "due_soon").length;
   const selectedGiro = giriQuery.data?.find((g) => g.id === giroId) ?? null;
   const activeGiroId = selectedGiro ? giroId : null;
 
@@ -174,6 +177,22 @@ export default function Dashboard() {
         }
         ListHeaderComponent={
           <>
+            {!searching && (susOverdue + susSoon) > 0 ? (
+              <Pressable testID="sospesi-alert" onPress={() => router.push("/sospesi")} style={styles.sosCard}>
+                <View style={styles.sosIcon}>
+                  <WarningCircle size={22} color={colors.error} weight="fill" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText weight="bold" style={styles.sosTitle}>Promemoria sospesi</AppText>
+                  <AppText style={styles.sosSub}>
+                    {susOverdue > 0 ? `${susOverdue} da incassare` : ""}
+                    {susOverdue > 0 && susSoon > 0 ? " · " : ""}
+                    {susSoon > 0 ? `${susSoon} in scadenza` : ""}
+                  </AppText>
+                </View>
+                <CaretRight size={20} color={colors.error} weight="bold" />
+              </Pressable>
+            ) : null}
             {!searching ? <UpdatesPanel isAdmin={isAdmin} /> : null}
             {activeGiroId && !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
               <View style={styles.summaryCard}>
@@ -350,4 +369,13 @@ const useStyles = makeStyles((c) => ({
   summaryNumber: { fontSize: 26, color: c.brand },
   summaryLabel: { fontSize: 12, color: c.muted },
   summaryDivider: { width: 1, alignSelf: "stretch", backgroundColor: c.border, marginVertical: spacing.xs },
+  sosCard: {
+    flexDirection: "row", alignItems: "center", gap: spacing.md,
+    backgroundColor: c.surface,
+    borderWidth: 1, borderColor: c.error,
+    borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, minHeight: 60,
+  },
+  sosIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  sosTitle: { fontSize: 15, color: c.onSurface },
+  sosSub: { fontSize: 12, color: c.error, marginTop: 1 },
 }));

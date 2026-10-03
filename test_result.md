@@ -101,3 +101,7 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Iter 20 (2026-10-03) — Filtro periodo storico + Promemoria sospesi
+- Backend: GET /api/activities nuovi param from_date/to_date (YYYY-MM-DD, giorno locale Rome); limit cap alzato a 2000. Nuovo GET /api/suspensions?scope= (overdue + due_soon entro 15gg, per-agente).
+- Frontend: /storico filtro periodo (chip mesi ultimi 12 + "Personalizzato" con Da/A GG/MM/AAAA + Applica). Nuova schermata /sospesi. Dashboard: card alert sospesi (testID sospesi-alert). Link in Altro (menu-sospesi).
+- needs_retesting: true. Credenziali: umberto/Umberto2774!, andrea/Andrea1606!.

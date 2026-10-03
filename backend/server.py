@@ -39,6 +39,7 @@ JWT_ALGO = "HS256"
 ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
 ROME = ZoneInfo("Europe/Rome")
 VISIT_THRESHOLD_DAYS = 21
+DUE_SOON_DAYS = 15  # finestra per considerare un incasso differito "in scadenza"
 
 # Admin seed (login via email). Overridable via env on Render; safe defaults so a
 # fresh production DB always gets a working admin without extra configuration.
@@ -109,6 +110,22 @@ def iso(dt: Optional[datetime]) -> Optional[str]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat()
+
+
+def parse_day_bound(s: Optional[str], end: bool = False) -> Optional[datetime]:
+    """Converte 'YYYY-MM-DD' (giorno locale Europe/Rome) nel relativo istante UTC.
+    end=False -> inizio giornata (00:00); end=True -> inizio del giorno successivo
+    (limite superiore esclusivo). Ritorna None se la stringa è vuota/non valida."""
+    if not s:
+        return None
+    try:
+        d = datetime.strptime(s.strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
+    local = d.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=ROME)
+    if end:
+        local = local + timedelta(days=1)
+    return local.astimezone(timezone.utc)
 
 
 async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer)):
@@ -1021,18 +1038,30 @@ async def list_activities(
     scope: str = Query("all"),  # all | umberto | andrea
     type: str = Query("all"),   # all | order | collection | suspension | reschedule
     limit: int = Query(200),
+    from_date: Optional[str] = Query(None),  # 'YYYY-MM-DD' (giorno locale Rome)
+    to_date: Optional[str] = Query(None),    # 'YYYY-MM-DD' (incluso)
     user=Depends(get_current_user),
 ):
     is_admin = user.get("role") == "admin"
     q = {"deleted_at": None, "type": {"$in": ACTIVITY_TYPES}}
     if type != "all" and type in ACTIVITY_TYPES:
         q["type"] = type
+    # Filtro periodo (inizio giornata <= created_at < inizio giorno successivo a to_date).
+    dfrom = parse_day_bound(from_date, end=False)
+    dto = parse_day_bound(to_date, end=True)
+    if dfrom or dto:
+        rng = {}
+        if dfrom:
+            rng["$gte"] = dfrom
+        if dto:
+            rng["$lt"] = dto
+        q["created_at"] = rng
     # Permissions: agents only ever see their own activities regardless of scope.
     if not is_admin:
         q["agent"] = user["username"]
     elif scope in VALID_AGENTS:
         q["agent"] = scope
-    lim = max(1, min(limit, 500))
+    lim = max(1, min(limit, 2000))
     events = await db.events.find(q, {"_id": 0}).sort("created_at", -1).limit(lim).to_list(lim)
 
     client_ids = list({e["client_id"] for e in events})
@@ -1062,6 +1091,95 @@ async def list_activities(
             "company_name": e.get("company_name"),
         })
     return out
+
+
+@api.get("/suspensions")
+async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_user)):
+    """Promemoria: clienti con sospesi attivi (scaduti/manuali non incassati) e
+    incassi differiti IN SCADENZA entro DUE_SOON_DAYS. Un elemento per (cliente, azienda)."""
+    is_admin = user.get("role") == "admin"
+    cq = {"deleted_at": None}
+    if not is_admin:
+        cq["agent"] = user["username"]
+    elif scope in VALID_AGENTS:
+        cq["agent"] = scope
+    clients = await db.clients.find(cq, {"_id": 0}).to_list(20000)
+    cmap = {c["id"]: c for c in clients}
+    cids = list(cmap.keys())
+    giri = await db.giri.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    gmap = {g["id"]: g["name"] for g in giri}
+
+    now = now_utc()
+    soon = now + timedelta(days=DUE_SOON_DAYS)
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    from collections import defaultdict
+    slots = defaultdict(lambda: {"paid": None, "manual": [], "orders": []})
+    if cids:
+        events = await db.events.find(
+            {"client_id": {"$in": cids}, "deleted_at": None,
+             "type": {"$in": ["order", "suspension", "collection"]}},
+            {"_id": 0},
+        ).to_list(200000)
+        for e in events:
+            comp = e.get("company_name") or e.get("company_id")
+            if not comp:
+                continue
+            s = slots[(e["client_id"], comp)]
+            created = _aware(e.get("created_at"))
+            if e["type"] == "collection":
+                if s["paid"] is None or (created and created > s["paid"]):
+                    s["paid"] = created
+            elif e["type"] == "suspension":
+                s["manual"].append(created)
+            elif e["type"] == "order":
+                due = _aware(e.get("due_at"))
+                if due is not None:
+                    s["orders"].append((created, due))
+
+    items = []
+    for (cid, comp), s in slots.items():
+        paid = s["paid"]
+        manual_active = any(paid is None or (c and c > paid) for c in s["manual"])
+        manual_since = min((c for c in s["manual"] if c and (paid is None or c > paid)), default=None)
+        overdue_dues = []
+        duesoon_dues = []
+        for created, due in s["orders"]:
+            unsettled = paid is None or (created and created > paid)
+            if not unsettled:
+                continue
+            if due <= now:
+                overdue_dues.append(due)
+            elif due <= soon:
+                duesoon_dues.append(due)
+
+        cli = cmap.get(cid, {})
+        base = {
+            "client_id": cid,
+            "ragione_sociale": cli.get("ragione_sociale", ""),
+            "citta": cli.get("citta", ""),
+            "agent": cli.get("agent", ""),
+            "giro_name": gmap.get(cli.get("giro_id")),
+            "company_name": comp,
+        }
+        if manual_active or overdue_dues:
+            due_at = min(overdue_dues) if overdue_dues else None
+            items.append({**base, "kind": "overdue", "due_at": iso(due_at),
+                          "since": iso(manual_since)})
+        elif duesoon_dues:
+            items.append({**base, "kind": "due_soon", "due_at": iso(min(duesoon_dues)),
+                          "since": None})
+
+    # Ordinamento: prima gli scaduti, poi in scadenza; per data di scadenza crescente.
+    def _key(it):
+        kind_rank = 0 if it["kind"] == "overdue" else 1
+        return (kind_rank, it["due_at"] or "")
+    items.sort(key=_key)
+    return items
 
 
 # ---------------------------------------------------------------------------
