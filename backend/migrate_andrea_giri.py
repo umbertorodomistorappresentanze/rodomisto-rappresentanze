@@ -43,8 +43,15 @@ def shared_id(name):
     g = db.giri.find_one({"name": name, "agent": "umberto"})
     return g["id"] if g else None
 
+# Il giro "principale" di Andrea proviene dal giro di Umberto che, a seconda
+# dell'ambiente, si chiama "...Altilia" (PRODUZIONE Atlas) oppure "...Falerna" (preview).
+ALTILIA_FALERNA = "Catanzaro → Lamezia Terme → Altilia"
+if not db.giri.find_one({"name": ALTILIA_FALERNA}):
+    ALTILIA_FALERNA = "Catanzaro → Lamezia Terme → Falerna"
+print("giro Altilia/Falerna rilevato:", ALTILIA_FALERNA)
+
 GUARDAVALLE = shared_id("Catanzaro → Guardavalle")
-FALERNA = shared_id("Catanzaro → Lamezia Terme → Falerna")
+FALERNA = shared_id(ALTILIA_FALERNA)
 LAMEZIA_VIBO = shared_id("Lamezia Terme → Vibo Valentia")
 VIBO_RICADI = shared_id("Vibo Valentia → Ricadi")
 SILA = shared_id("Catanzaro → Sila Piccola")
@@ -96,7 +103,7 @@ UMBERTO_ORDER = [
     "Catanzaro → Guardavalle",
     "Lamezia Terme → Vibo Valentia",
     "Vibo Valentia → Ricadi",
-    "Catanzaro → Lamezia Terme → Falerna",
+    ALTILIA_FALERNA,
     "Catanzaro → Crotone",
     "Catanzaro → Sila Piccola",
 ]

@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 18 (2026-10-03) — Migrazione ESEGUITA su Atlas produzione (route-manager-126)
+- Eseguito `migrate_andrea_giri.py` direttamente su Atlas con stringa fornita dall'utente. PRIMA: 7 giri legacy (agent none), 0 giri Andrea, 642 clienti. Rilevata differenza chiave: in PRODUZIONE il 5° giro si chiama "Catanzaro → Lamezia Terme → Altilia" (NON "Falerna" come in preview) e conteneva 48 clienti di Andrea.
+- FIX script reso robusto: variabile ALTILIA_FALERNA rileva automaticamente il nome esistente ("...Altilia" in prod, "...Falerna" in preview) sia per lo spostamento clienti sia per l'ordinamento Umberto. Senza questo fix i 48 clienti Andrea sarebbero finiti in Da Verificare.
+- RISULTATO Atlas: Umberto 7 giri ordinati (Catanzaro e Limitrofi, Guardavalle, Lamezia→Vibo, Vibo→Ricadi, …Altilia, Crotone, Sila Piccola). Andrea 6 giri creati e ordinati (Lamezia Terme=48, →Tiriolo=0, →San Vito=4, →Nocera Terinese=0, →Vibo Valentia=20, Vibo→Ricadi=6) + 6 in Da Verificare. Totale andrea 84, umberto 556, order unici per agente. Backup pre-migrazione in /tmp (non committato).
+- NOTA: la produzione (Vercel/Render/Atlas) ora è allineata. Il DB Emergent/preview usa ancora il nome "Falerna" per lo stesso giro → piccola differenza di nome tra Expo Go (Emergent) e Vercel (Atlas), da uniformare se desiderato.
+
 ## Iter 17 (2026-10-03) — Conteggio clienti nei giri, ordinamento giri, script Atlas aggiornato
 - "0 località" FIX: `GET /api/giri` ora ritorna `client_count` per ogni giro (aggregazione clienti attivi per giro_id). Frontend `giri.tsx` e `select-giro.tsx` mostrano "N clienti" invece di "N località" (i giri di Andrea avevano localities vuote pur avendo clienti → ora corretto, es. Lamezia Terme = 54 clienti).
 - ORDINAMENTO giri impostato per-utente (campo order). Umberto era già corretto: Catanzaro e Limitrofi, Guardavalle, Lamezia→Vibo, Vibo→Ricadi, Catanzaro→Lamezia Terme→Falerna (pos.5, nome invariato su richiesta), Crotone, Sila Piccola. Andrea riordinato: Lamezia Terme, →Tiriolo, →San Vito, →Nocera Terinese, →Vibo Valentia, Vibo→Ricadi.
