@@ -44,10 +44,14 @@ def shared_id(name):
     return g["id"] if g else None
 
 # Il giro "principale" di Andrea proviene dal giro di Umberto che, a seconda
-# dell'ambiente, si chiama "...Altilia" (PRODUZIONE Atlas) oppure "...Falerna" (preview).
-ALTILIA_FALERNA = "Catanzaro → Lamezia Terme → Altilia"
-if not db.giri.find_one({"name": ALTILIA_FALERNA}):
-    ALTILIA_FALERNA = "Catanzaro → Lamezia Terme → Falerna"
+# dell'ambiente/storico, può chiamarsi "Catanzaro → Altilia" (nome finale uniforme),
+# "...Lamezia Terme → Altilia" (vecchio nome produzione) o "...Falerna" (vecchio preview).
+ALTILIA_FALERNA = None
+for _cand in ["Catanzaro → Altilia", "Catanzaro → Lamezia Terme → Altilia", "Catanzaro → Lamezia Terme → Falerna"]:
+    if db.giri.find_one({"name": _cand}):
+        ALTILIA_FALERNA = _cand
+        break
+ALTILIA_FALERNA = ALTILIA_FALERNA or "Catanzaro → Altilia"
 print("giro Altilia/Falerna rilevato:", ALTILIA_FALERNA)
 
 GUARDAVALLE = shared_id("Catanzaro → Guardavalle")

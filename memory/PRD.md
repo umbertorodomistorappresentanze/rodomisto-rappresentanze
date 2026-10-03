@@ -1,5 +1,12 @@
 # AgendaVisite — PRD
 
+## Iter 19 (2026-10-03) — Rinomina "Catanzaro → Altilia" + riempimento Da Verificare di Andrea
+- RINOMINA uniforme: il 5° giro di Umberto ora si chiama "Catanzaro → Altilia" in ENTRAMBI gli ambienti (preview: era "…Falerna"; produzione Atlas: era "…Lamezia Terme → Altilia"). migrate_andrea_giri.py aggiornato: rileva automaticamente il nome tra ["Catanzaro → Altilia", "…Lamezia Terme → Altilia", "…Falerna"].
+- RIEMPIMENTO Da Verificare: nuovo script idempotente `backend/fill_andrea_daverificare.py` (sposta per prefisso id, solo clienti andrea con giro_id=None, accoda in fondo). Mappatura confermata dall'utente:
+  La Conchiglia(Curinga) & Gi.Bo.Da.(Filadelfia) → Lamezia Terme → Vibo Valentia; Platonico(Magisano) → Lamezia Terme → Tiriolo; Vecchio Monastero & Hotel 2000 (Pianopoli) → Lamezia Terme; Pizzeria 400 Gradi(San Vito) → Lamezia Terme → San Vito.
+- PRODUZIONE Atlas dopo riempimento: Lamezia Terme=50, →Tiriolo=1, →San Vito=5, →Nocera Terinese=0, →Vibo Valentia=22, Vibo→Ricadi=6; Da Verificare=0 (tot 84). PREVIEW allineata (0 Da Verificare; conteggi leggermente diversi 54/1/4/0/20/6 per artefatti test storici, non bloccante).
+- Verificato: API preview /giri (order+client_count) e /clients/da-verificare=0. Produzione verificata da output script.
+
 ## Iter 18 (2026-10-03) — Migrazione ESEGUITA su Atlas produzione (route-manager-126)
 - Eseguito `migrate_andrea_giri.py` direttamente su Atlas con stringa fornita dall'utente. PRIMA: 7 giri legacy (agent none), 0 giri Andrea, 642 clienti. Rilevata differenza chiave: in PRODUZIONE il 5° giro si chiama "Catanzaro → Lamezia Terme → Altilia" (NON "Falerna" come in preview) e conteneva 48 clienti di Andrea.
 - FIX script reso robusto: variabile ALTILIA_FALERNA rileva automaticamente il nome esistente ("...Altilia" in prod, "...Falerna" in preview) sia per lo spostamento clienti sia per l'ordinamento Umberto. Senza questo fix i 48 clienti Andrea sarebbero finiti in Da Verificare.
