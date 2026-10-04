@@ -1,8 +1,6 @@
 """
-Entry point alternativo per deploy tipo Render (start command: `uvicorn main:app`).
-
-Riesporta semplicemente l'app FastAPI definita in server.py.
-NB: l'ADMIN SEED che sovrascriveva la password all'avvio è stato RIMOSSO
-(richiesta esplicita). Le credenziali vivono solo nel database.
+PONTE alternativo (start command stile Render: `uvicorn main:app`).
+Riesporta l'app FastAPI reale definita in `frontend/api/index.py`.
+Nessun ADMIN SEED: le credenziali vivono solo nel database.
 """
-from server import app  # noqa: F401  (riesporta l'app FastAPI)
+from server import app  # noqa: F401

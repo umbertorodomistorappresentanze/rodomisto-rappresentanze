@@ -1,5 +1,13 @@
 # AgendaVisite — PRD
 
+## Iter 23 (2026-10-04) — Architettura unificata: backend in frontend/api (Vercel) + rimozione ADMIN SEED
+- PARTE 1: rimosso l'ADMIN SEED che sovrascriveva la password all'avvio (server.py `ensure_admin_users` e main.py `ensure_admin_on_start` eliminati; costanti SEED_ADMIN rimosse). Login invariato (utenti nel DB).
+- PARTE 2 (Excel senza pandas): verificato che l'export usa GIÀ openpyxl; pandas/numpy NON usati dall'app → esclusi dalle dipendenze di produzione Vercel.
+- PARTE 3 (codice unico + Vercel): spostato il backend in `frontend/api/` (index.py = ex server.py, + seed_data.py, recurrence_seed.py, data/clienti.xlsx). `/app/backend/server.py` e `main.py` ora sono PONTI che aggiungono frontend/api al path e riesportano l'app → l'anteprima Emergent/Expo Go continua a funzionare senza duplicare codice. index.py: load_dotenv robusto (frontend/api/.env o backend/.env) + startup che salta il seed su Vercel (env VERCEL/DISABLE_SEED).
+- Config Vercel: `frontend/api/requirements.txt` SLIM (fastapi, pydantic, motor, pymongo, pyjwt, bcrypt, python-dotenv, openpyxl, tzdata). `frontend/vercel.json`: functions api/index.py (maxDuration 60, excludeFiles data) + rewrites (/api/* → funzione, resto → SPA). `frontend/.env.production`: EXPO_PUBLIC_BACKEND_URL vuoto → chiamate relative `/api` (same-origin, niente CORS). api.ts: `BASE = EXPO_PUBLIC_BACKEND_URL || ""`.
+- Verificato: ponte attivo (login+6 endpoint 200), preview UI OK (dashboard/badge), export web OK senza URL assoluti nel bundle, pytest iter11 14/14.
+- AZIONE UTENTE su Vercel: Root Directory=frontend; env Production MONGO_URL (Atlas), DB_NAME=route-manager-126, JWT_SECRET (stabile), ACCESS_TOKEN_DAYS=30. Render non più necessario.
+
 ## Iter 22 (2026-10-03) — Fix CORS per Web App Vercel
 - Root cause: CORSMiddleware aveva allow_credentials=True + allow_origins=["*"] → i browser rifiutano il wildcard con credenziali (login Vercel bloccato).
 - Fix (server.py fine file): allow_origins esplicito [vercel prod, localhost:3000/8081/19006] + allow_origin_regex r"https://([a-z0-9-]+\.)*(vercel\.app|emergentagent\.com)$", allow_credentials=True (riflette l'origine). Verificato con curl OPTIONS: ACAO riflette il dominio Vercel (prod e *-git-*.vercel.app), origine sconosciuta → nessun ACAO (bloccata).

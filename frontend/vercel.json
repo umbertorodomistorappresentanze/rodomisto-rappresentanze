@@ -3,7 +3,15 @@
   "outputDirectory": "dist",
   "installCommand": "yarn install",
   "framework": null,
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "memory": 512,
+      "excludeFiles": "{data/**,**/__pycache__/**}"
+    }
+  },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

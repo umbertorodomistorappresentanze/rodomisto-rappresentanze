@@ -1,7 +1,7 @@
 // API client. Reads the JWT from secure storage and attaches it to every call.
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 export const TOKEN_KEY = "agendavisite_token";
 
 export type ApiError = { status: number; detail: string };
