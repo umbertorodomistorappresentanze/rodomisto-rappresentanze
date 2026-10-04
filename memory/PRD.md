@@ -1,5 +1,13 @@
 # AgendaVisite — PRD
 
+## Iter 27 (2026-10-04) — Fallback: frontend Vercel → backend Render (abbandonata unificazione serverless)
+- Vercel ignorava del tutto la funzione Python (build log senza @vercel/python): esegue solo build statica. Si torna a backend su Render + frontend Vercel.
+- vercel.json: solo-statico (buildCommand expo export, outputDirectory dist, rewrite SPA /(.*)→/index.html).
+- .env.production: EXPO_PUBLIC_BACKEND_URL=https://rodomisto-backend.onrender.com.
+- SCOPERTA CHIAVE: `expo export -p web` NON carica .env/.env.production; inlina EXPO_PUBLIC_* solo da process.env. `.env` è gitignored. → su Vercel la variabile EXPO_PUBLIC_BACKEND_URL DEVE essere impostata nella DASHBOARD (Production) per essere incorporata nel bundle. Verificato: passando la var via env, l'URL compare nel bundle.
+- Backend Render: il codice reale è in frontend/api/index.py; backend/main.py e server.py sono PONTI. Render (root dir=backend, start `uvicorn main:app`) importa il codice unificato via ponte (../frontend/api). RICHIEDE redeploy per prendere il fix CORS (allow origin Vercel) e la rimozione admin seed.
+- Nota: la funzione serverless frontend/api resta nel repo ma inutilizzata da Vercel (innocua); il ponte la riusa per preview e Render.
+
 ## Iter 26 (2026-10-04) — Vercel /api ancora 404: rimosso builds, rewrite /api→funzione ripristinato
 - File frontend/api/*.py tracciati e NON gitignored (verificato) → arrivano a Vercel. Il 404 secco = funzione non creata o sotto-percorsi non instradati.
 - Imparato: (a) api/index.py risponde solo a /api; i sotto-path (/api/health) servono rewrite /api/(.*)→/api; (b) `builds` può sopprimere l'autodetect Python.

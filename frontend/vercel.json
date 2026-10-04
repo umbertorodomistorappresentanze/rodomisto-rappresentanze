@@ -3,7 +3,6 @@
   "outputDirectory": "dist",
   "installCommand": "yarn install",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
