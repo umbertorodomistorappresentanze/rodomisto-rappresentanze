@@ -26,14 +26,18 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
 
   async function onSubmit() {
-    if (!username.trim() || !password) return;
+    if (!username.trim() || !password.trim()) return;
     setBusy(true);
     setError("");
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password.trim());
       router.replace("/(tabs)");
     } catch (e: any) {
-      setError(e?.detail || "Accesso non riuscito");
+      // Mostra l'errore ESATTO restituito dal server (status + detail) o il
+      // messaggio di rete/CORS, invece di un generico "Accesso non riuscito".
+      const status = e?.status != null ? `[${e.status}] ` : "";
+      const detail = e?.detail || e?.message || "Accesso non riuscito";
+      setError(`${status}${detail}`);
     } finally {
       setBusy(false);
     }
@@ -99,7 +103,7 @@ export default function LoginScreen() {
             testID="login-submit"
             onPress={onSubmit}
             loading={busy}
-            disabled={!username.trim() || !password}
+            disabled={!username.trim() || !password.trim()}
             style={{ marginTop: spacing.sm }}
           />
         </View>

@@ -83,11 +83,19 @@ export function exportUrl(path: string): string {
 }
 
 export async function loginRequest(username: string, password: string) {
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username.trim(), password: password.trim() }),
+    });
+  } catch (e: any) {
+    // fetch lancia (rete/CORS/DNS/mixed-content) PRIMA di ricevere una risposta:
+    // esponiamo l'URL di destinazione e il messaggio reale per facilitare la diagnosi.
+    const err: ApiError = { status: 0, detail: `Connessione a ${BASE} fallita: ${e?.message || e}` };
+    throw err;
+  }
   await handle(res);
   return res.json();
 }
