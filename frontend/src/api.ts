@@ -1,12 +1,19 @@
 // API client. Reads the JWT from secure storage and attaches it to every call.
 import { storage } from "@/src/utils/storage";
 
-// URL base del backend. In anteprima Emergent la variabile EXPO_PUBLIC_BACKEND_URL
-// è sempre impostata (.env). In produzione web (Vercel), se la variabile non viene
-// incorporata nel bundle da `expo export`, si usa come fallback il backend su Render
-// per evitare chiamate relative verso un'origine priva di API ("Errore di rete").
-const BASE =
-  process.env.EXPO_PUBLIC_BACKEND_URL || "https://rodomisto-backend.onrender.com";
+// URL base del backend.
+// - Anteprima Emergent: EXPO_PUBLIC_BACKEND_URL è impostata (.env) → la usa.
+// - Produzione web (Vercel): se la variabile è vuota OPPURE punta per errore al
+//   dominio frontend (*.vercel.app), si forza il backend su Render per evitare
+//   chiamate verso un'origine priva di API ("Errore di rete" / 404).
+const RENDER_BACKEND = "https://rodomisto-backend.onrender.com";
+function resolveBase(): string {
+  const env = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim();
+  if (!env) return RENDER_BACKEND;
+  if (/vercel\.app/i.test(env)) return RENDER_BACKEND;
+  return env;
+}
+const BASE = resolveBase();
 export const TOKEN_KEY = "agendavisite_token";
 
 export type ApiError = { status: number; detail: string };
