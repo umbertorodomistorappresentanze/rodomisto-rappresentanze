@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 26 (2026-10-04) — Vercel /api ancora 404: rimosso builds, rewrite /api→funzione ripristinato
+- File frontend/api/*.py tracciati e NON gitignored (verificato) → arrivano a Vercel. Il 404 secco = funzione non creata o sotto-percorsi non instradati.
+- Imparato: (a) api/index.py risponde solo a /api; i sotto-path (/api/health) servono rewrite /api/(.*)→/api; (b) `builds` può sopprimere l'autodetect Python.
+- vercel.json finale: buildCommand expo export + outputDirectory dist + rewrites [{/api/(.*)→/api},{/(.*)→/index.html}]. Niente `builds`, niente framework:null.
+- IN ATTESA: build log Vercel + tab Functions per diagnosi definitiva (se la funzione non compare → problema di detection lato progetto Vercel). Fallback possibile: tornare a backend su Render (CORS già fixato) + frontend Vercel.
+
 ## Iter 25 (2026-10-04) — Vercel non rilevava la funzione Python (404 su /api/health) → config esplicita builds+routes
 - Causa: con buildCommand custom + framework:null, Vercel trattava il progetto come solo-statico e NON creava la serverless function → /api/* 404 NOT_FOUND.
 - Fix (vercel.json) con schema legacy ESPLICITO che forza entrambe le build:
