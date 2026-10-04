@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 24 (2026-10-04) — Fix routing Vercel (/api) per "Errore di rete" al login
+- Causa probabile: il rewrite esplicito `/api/(.*)` → `/api/index` alterava il percorso visto da FastAPI (404) e/o interferiva con l'instradamento nativo delle funzioni Vercel.
+- Fix (vercel.json): rimosso il rewrite /api; ora SOLO fallback SPA con negative lookahead `{"source":"/((?!api/).*)","destination":"/index.html"}` → Vercel instrada nativamente `/api/*` alla funzione `api/index.py` (dichiarata in `functions`). Aggiunto `frontend/requirements.txt` (root, slim) oltre a `frontend/api/requirements.txt` per garantire l'install delle dipendenze Python su Vercel.
+- Aggiunto endpoint diagnostico `GET /api/health` (no auth) → {ok, db, service}. Verificato localmente via ponte: health ok (db:true), login 200.
+- AZIONE UTENTE: Save to GitHub + redeploy Vercel; testare https://<dominio>/api/health (deve dare JSON, non HTML). Se HTML→routing/funzione non attiva; se 500→env mancanti (MONGO_URL/DB_NAME/JWT_SECRET).
+
 ## Iter 23 (2026-10-04) — Architettura unificata: backend in frontend/api (Vercel) + rimozione ADMIN SEED
 - PARTE 1: rimosso l'ADMIN SEED che sovrascriveva la password all'avvio (server.py `ensure_admin_users` e main.py `ensure_admin_on_start` eliminati; costanti SEED_ADMIN rimosse). Login invariato (utenti nel DB).
 - PARTE 2 (Excel senza pandas): verificato che l'export usa GIÀ openpyxl; pandas/numpy NON usati dall'app → esclusi dalle dipendenze di produzione Vercel.

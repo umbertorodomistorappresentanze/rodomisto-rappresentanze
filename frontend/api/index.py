@@ -61,6 +61,17 @@ PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60"
 
 app = FastAPI(title="Rodomisto Rappresentanze API")
 api = APIRouter(prefix="/api")
+
+
+@api.get("/health")
+async def health():
+    """Diagnostica: conferma che la funzione API risponde (nessuna auth)."""
+    try:
+        await db.command("ping")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {"ok": True, "db": db_ok, "service": "rodomisto-api"}
 bearer = HTTPBearer(auto_error=False)
 
 
