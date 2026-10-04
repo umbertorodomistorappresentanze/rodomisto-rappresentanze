@@ -1,5 +1,13 @@
 # AgendaVisite — PRD
 
+## Iter 25 (2026-10-04) — Vercel non rilevava la funzione Python (404 su /api/health) → config esplicita builds+routes
+- Causa: con buildCommand custom + framework:null, Vercel trattava il progetto come solo-statico e NON creava la serverless function → /api/* 404 NOT_FOUND.
+- Fix (vercel.json) con schema legacy ESPLICITO che forza entrambe le build:
+  builds: [ {src:"package.json", use:"@vercel/static-build", config:{distDir:"dist"}} , {src:"api/index.py", use:"@vercel/python"} ]
+  routes: [ {src:"/api/(.*)", dest:"api/index.py"}, {handle:"filesystem"}, {src:"/(.*)", dest:"/index.html"} ]
+- @vercel/static-build esegue lo script npm "build" (npx expo export -p web, output dist). @vercel/python usa frontend/api/requirements.txt. Il percorso /api/* arriva integro alla funzione (FastAPI prefisso /api).
+- AZIONE UTENTE: Save to GitHub + Redeploy; testare /api/health (atteso JSON). Nota: con "builds" Vercel ignora Build Command/Output Directory della dashboard.
+
 ## Iter 24 (2026-10-04) — Fix routing Vercel (/api) per "Errore di rete" al login
 - Causa probabile: il rewrite esplicito `/api/(.*)` → `/api/index` alterava il percorso visto da FastAPI (404) e/o interferiva con l'instradamento nativo delle funzioni Vercel.
 - Fix (vercel.json): rimosso il rewrite /api; ora SOLO fallback SPA con negative lookahead `{"source":"/((?!api/).*)","destination":"/index.html"}` → Vercel instrada nativamente `/api/*` alla funzione `api/index.py` (dichiarata in `functions`). Aggiunto `frontend/requirements.txt` (root, slim) oltre a `frontend/api/requirements.txt` per garantire l'install delle dipendenze Python su Vercel.
