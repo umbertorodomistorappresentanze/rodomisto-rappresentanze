@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, SectionList, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +28,12 @@ export default function Dashboard() {
   const { giroId, ready } = useSelectedGiro();
   const sheetRef = useRef<QuickActionsRef>(null);
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiGet<Company[]>("/companies") });
@@ -53,35 +59,39 @@ export default function Dashboard() {
 
   const searching = search.trim().length > 0;
 
+  const searchQuery = useQuery({
+    queryKey: ["client-search", debounced],
+    queryFn: () => apiGet<Client[]>(`/clients/search?q=${encodeURIComponent(debounced)}`),
+    enabled: debounced.length > 0,
+  });
+
   const sections = useMemo(() => {
-    const list = clientsQuery.data ?? [];
     if (searching) {
-      const norm = (s: string) =>
-        (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const q = norm(search.trim());
-      const found = list.filter(
-        (c) => norm(c.ragione_sociale).includes(q) || norm(c.citta).includes(q)
-      );
+      const found = searchQuery.data ?? [];
       return [{ title: "RISULTATI", count: found.length, data: found }];
     }
+    const list = clientsQuery.data ?? [];
     const daVisitare = list.filter((c) => c.status === "da_visitare");
     const gestiti = list.filter((c) => c.status !== "da_visitare");
     const out: { title: string; count: number; data: Client[] }[] = [];
     out.push({ title: "DA VISITARE", count: daVisitare.length, data: daVisitare });
     out.push({ title: "GIÀ VISITATI / GESTITI", count: gestiti.length, data: gestiti });
     return out;
-  }, [clientsQuery.data, searching, search]);
+  }, [clientsQuery.data, searching, searchQuery.data]);
 
   function onActionSuccess(message: string) {
     toast(message, "success");
     qc.invalidateQueries({ queryKey: ["clients", activeGiroId] });
+    qc.invalidateQueries({ queryKey: ["client-search"] });
     qc.invalidateQueries({ queryKey: ["activities"] });
   }
 
   const openActions = (c: Client) => sheetRef.current?.present(c);
   const openHistory = (c: Client) => router.push(`/client/${c.id}`);
 
-  const displaySections = !activeGiroId || clientsQuery.isLoading ? [] : sections;
+  const displaySections = searching
+    ? (searchQuery.isLoading ? [] : sections)
+    : (!activeGiroId || clientsQuery.isLoading ? [] : sections);
 
   if (!ready) return <Loading />;
 
@@ -119,7 +129,9 @@ export default function Dashboard() {
           </Pressable>
         </View>
 
-        <AppText weight="bold" style={styles.blockLabel}>GIRO VISITE CLIENTI</AppText>
+        {activeGiroId && !searching ? (
+          <AppText weight="bold" style={styles.blockLabel}>GIRO VISITE CLIENTI</AppText>
+        ) : null}
         <Pressable testID="select-giro-card" onPress={() => router.push("/select-giro")} style={styles.giroCard}>
           <View style={styles.giroIcon}>
             <MapTrifold size={26} color={colors.onBrand} weight="fill" />
@@ -137,27 +149,25 @@ export default function Dashboard() {
           <CaretRight size={22} color={colors.onBrand} weight="bold" />
         </Pressable>
 
-        {activeGiroId ? (
-          <View style={styles.searchField}>
-            <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
-            <TextInput
-              testID="giro-search"
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Cerca cliente per nome o comune…"
-              placeholderTextColor={colors.muted}
-              style={styles.searchInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            {searching ? (
-              <Pressable testID="giro-search-clear" onPress={() => setSearch("")} hitSlop={8}>
-                <X size={18} color={colors.muted} weight="bold" />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.searchField}>
+          <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
+          <TextInput
+            testID="giro-search"
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Cerca qualsiasi cliente (anche fuori giro)…"
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searching ? (
+            <Pressable testID="giro-search-clear" onPress={() => setSearch("")} hitSlop={8}>
+              <X size={18} color={colors.muted} weight="bold" />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <SectionList
@@ -239,10 +249,14 @@ export default function Dashboard() {
           ) : null
         }
         ListEmptyComponent={
-          !activeGiroId ? (
+          searching ? (
+            searchQuery.isLoading ? <Loading /> : (
+              <EmptyState title="Nessun cliente trovato" text="Prova con un altro nome o comune." />
+            )
+          ) : !activeGiroId ? (
             <EmptyState
               title="Nessun giro selezionato"
-              text="Scegli il giro di oggi con il pulsante verde qui sopra per vedere i clienti."
+              text="Scegli il giro di oggi con il pulsante verde qui sopra, oppure cerca un cliente qualsiasi con la barra di ricerca."
             />
           ) : clientsQuery.isLoading ? (
             <Loading />

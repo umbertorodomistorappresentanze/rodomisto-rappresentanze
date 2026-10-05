@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 28 (2026-10-05) — Ricerca libera dashboard + Data attività + Sigla provincia (per umberto e andrea)
+- #1 RICERCA LIBERA: Dashboard mostra SEMPRE la barra di ricerca (anche senza giro). Nuovo GET /api/clients/search?q= (ragione_sociale O citta, filtro agente se non admin, limit 60, arricchito con status/suspensions/last_order_at/last_collection_at). Si apre il bottom sheet azioni su qualunque cliente trovato.
+- #2 DATA ATTIVITA': ActivityDateField (chip Oggi/Ieri/2gg/3gg + input GG/MM/AAAA su web, DateTimePicker su native) in order/collection/suspension/note del QuickActionsSheet. Backend EventCreate.activity_date (ISO o YYYY-MM-DD) → created_at, due_at base ordini, last_visit_at visite. Helper parse_activity_date (Rome mezzogiorno).
+- #3 SIGLA PROVINCIA: backend normalize_provincia() (mappa nomi italiani→sigle, 2 lettere maiuscole) in create/update client + recurrence add. Frontend form new/edit: autoCapitalize characters + normalizzazione onBlur (web) e onEndEditing (native) + su submit (src/utils/provincia.ts).
+- Verificato: testing_agent iter13 — backend 16/16 pytest, frontend OK per umberto e andrea. BUG trovato e corretto: onEndEditing non scatta su RN-Web → aggiunto onBlur in new.tsx/edit.tsx. 6 eventi TEST_iter28 retrodatati residui in preview (solo rumore).
+
 ## Iter 27 (2026-10-04) — Fallback: frontend Vercel → backend Render (abbandonata unificazione serverless)
 - Vercel ignorava del tutto la funzione Python (build log senza @vercel/python): esegue solo build statica. Si torna a backend su Render + frontend Vercel.
 - vercel.json: solo-statico (buildCommand expo export, outputDirectory dist, rewrite SPA /(.*)→/index.html).

@@ -111,3 +111,11 @@
 - Frontend: da-verificare mostra P.IVA + avviso "Stessa P.IVA di X" + pulsanti Unisci (testID verify-merge-<id>) ed Elimina (verify-delete-<id>) per admin, con conferma cross-platform. Tab "Oggi" ha tabBarBadge con conteggio sospesi (/suspensions). Card promemoria in home invariata.
 - Dati preview: 9 gruppi duplicati (18 record) flaggati needs_review, 2 sospesi attivi (badge=2).
 - needs_retesting: true.
+
+## Iter 28 (2026-10-05) — Ricerca libera dashboard + Data attività + Sigla provincia
+- #1 RICERCA LIBERA: Dashboard (app/(tabs)/index.tsx) ora mostra SEMPRE la barra di ricerca (testID giro-search), anche senza giro selezionato. Nuovo endpoint GET /api/clients/search?q= (cerca ragione_sociale O citta, filtro per agente se non admin, limit 60, arricchito con status/suspensions/last_order_at/last_collection_at). Si può cercare e aprire le azioni rapide su qualunque cliente.
+- #2 DATA ATTIVITA': QuickActionsSheet (src/components/quick-actions-sheet.tsx) ha nuovo campo ActivityDateField (src/components/activity-date-field.tsx) in modalità order/collection/suspension/note. Default OGGI, chip rapidi (Oggi/Ieri/2gg/3gg, testID activity-date-0..3) + input GG/MM/AAAA su web (testID activity-date-input) / DateTimePicker su native. Backend EventCreate.activity_date (ISO o YYYY-MM-DD) → usato per created_at, due_at base (ordini) e last_visit_at (visite). Helper parse_activity_date (giorno locale Rome a mezzogiorno).
+- #3 SIGLA PROVINCIA: backend normalize_provincia() forza sigla 2 lettere maiuscole (mappa nomi italiani→sigle); applicata in create_client, update_client, recurrence add. Frontend client/new.tsx e client/edit/[id].tsx: campo Provincia autoCapitalize characters + normalizzazione onEndEditing + su submit (src/utils/provincia.ts). Es: "Catanzaro"→CZ, "vibo valentia"→VV, "kr"→KR.
+- Verificato backend via requests: search OK (38 risultati "bar", con status/suspensions), province (CZ/VV/KR/RC/CS/MI) OK, order con activity_date 5gg fa → created_at corretto. Frontend smoke: ricerca "bar" senza giro → 38 RISULTATI OK.
+- Credenziali: umberto/Umberto2774!, andrea/Andrea1606!.
+- needs_retesting: true.

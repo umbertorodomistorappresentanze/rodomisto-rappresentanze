@@ -92,6 +92,88 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# --- Provincia: normalizzazione a sigla di 2 lettere maiuscole ------------
+# Mappa nome esteso (lowercase, senza accenti) -> sigla. Copre tutte le
+# province italiane. Se l'input è già una sigla di 2 lettere la lascia (upper).
+PROVINCE_MAP = {
+    "agrigento": "AG", "alessandria": "AL", "ancona": "AN", "aosta": "AO",
+    "arezzo": "AR", "ascoli piceno": "AP", "asti": "AT", "avellino": "AV",
+    "bari": "BA", "barletta-andria-trani": "BT", "barletta andria trani": "BT",
+    "belluno": "BL", "benevento": "BN", "bergamo": "BG", "biella": "BI",
+    "bologna": "BO", "bolzano": "BZ", "brescia": "BS", "brindisi": "BR",
+    "cagliari": "CA", "caltanissetta": "CL", "campobasso": "CB",
+    "carbonia-iglesias": "CI", "caserta": "CE", "catania": "CT",
+    "catanzaro": "CZ", "chieti": "CH", "como": "CO", "cosenza": "CS",
+    "cremona": "CR", "crotone": "KR", "cuneo": "CN", "enna": "EN",
+    "fermo": "FM", "ferrara": "FE", "firenze": "FI", "foggia": "FG",
+    "forli-cesena": "FC", "forli cesena": "FC", "frosinone": "FR",
+    "genova": "GE", "gorizia": "GO", "grosseto": "GR", "imperia": "IM",
+    "isernia": "IS", "la spezia": "SP", "l'aquila": "AQ", "laquila": "AQ",
+    "latina": "LT", "lecce": "LE", "lecco": "LC", "livorno": "LI",
+    "lodi": "LO", "lucca": "LU", "macerata": "MC", "mantova": "MN",
+    "massa-carrara": "MS", "massa carrara": "MS", "matera": "MT",
+    "messina": "ME", "milano": "MI", "modena": "MO", "monza e brianza": "MB",
+    "monza e della brianza": "MB", "napoli": "NA", "novara": "NO",
+    "nuoro": "NU", "oristano": "OR", "padova": "PD", "palermo": "PA",
+    "parma": "PR", "pavia": "PV", "perugia": "PG", "pesaro e urbino": "PU",
+    "pescara": "PE", "piacenza": "PC", "pisa": "PI", "pistoia": "PT",
+    "pordenone": "PN", "potenza": "PZ", "prato": "PO", "ragusa": "RG",
+    "ravenna": "RA", "reggio calabria": "RC", "reggio di calabria": "RC",
+    "reggio emilia": "RE", "reggio nell'emilia": "RE", "rieti": "RI",
+    "rimini": "RN", "roma": "RM", "rovigo": "RO", "salerno": "SA",
+    "sassari": "SS", "savona": "SV", "siena": "SI", "siracusa": "SR",
+    "sondrio": "SO", "taranto": "TA", "teramo": "TE", "terni": "TR",
+    "torino": "TO", "trapani": "TP", "trento": "TN", "treviso": "TV",
+    "trieste": "TS", "udine": "UD", "varese": "VA", "venezia": "VE",
+    "verbano-cusio-ossola": "VB", "verbania": "VB", "vercelli": "VC",
+    "verona": "VR", "vibo valentia": "VV", "vicenza": "VI", "viterbo": "VT",
+}
+_VALID_SIGLE = set(PROVINCE_MAP.values())
+
+
+def normalize_provincia(raw: Optional[str]) -> str:
+    """Restituisce sempre la sigla di 2 lettere MAIUSCOLE della provincia.
+    - '' se vuoto
+    - sigla nota (es. 'cz') -> 'CZ'
+    - nome esteso (es. 'Catanzaro') -> 'CZ'
+    - fallback: primi 2 caratteri alfabetici in maiuscolo."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    low = s.lower().strip(". ")
+    # accenti via rimozione semplice
+    low = (low.replace("à", "a").replace("è", "e").replace("é", "e")
+              .replace("ì", "i").replace("ò", "o").replace("ù", "u"))
+    if len(s) == 2 and s.isalpha() and s.upper() in _VALID_SIGLE:
+        return s.upper()
+    if low in PROVINCE_MAP:
+        return PROVINCE_MAP[low]
+    if len(s) == 2 and s.isalpha():
+        return s.upper()
+    letters = "".join(ch for ch in s if ch.isalpha())
+    return letters[:2].upper()
+
+
+def parse_activity_date(raw: Optional[str], default: datetime) -> datetime:
+    """Converte una data ISO (o 'YYYY-MM-DD') in datetime UTC. Usa il giorno
+    locale Rome a mezzogiorno per evitare slittamenti di fuso. Se non valida,
+    ritorna il default."""
+    if not raw:
+        return default
+    try:
+        txt = raw.strip()
+        if len(txt) == 10 and txt[4] == "-" and txt[7] == "-":
+            y, m, d = int(txt[:4]), int(txt[5:7]), int(txt[8:10])
+            local = datetime(y, m, d, 12, 0, 0, tzinfo=ROME)
+            return local.astimezone(timezone.utc)
+        dt = datetime.fromisoformat(txt.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return default
+
+
 def start_of_today_utc() -> datetime:
     local = datetime.now(ROME)
     start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -221,6 +303,7 @@ class EventCreate(BaseModel):
     reschedule_days: Optional[int] = None
     reschedule_date: Optional[str] = None  # ISO date string
     payment_mode: Optional[str] = None  # for orders
+    activity_date: Optional[str] = None  # data attività (ISO o YYYY-MM-DD); default oggi
 
 
 # ---------------------------------------------------------------------------
@@ -835,6 +918,38 @@ async def list_all_clients(search: str = Query("", alias="search"), user=Depends
     return [client_public(d) for d in docs]
 
 
+@api.get("/clients/search")
+async def search_clients(q: str = Query("", alias="q"), user=Depends(get_current_user)):
+    """Ricerca libera (nome O comune) su TUTTI i clienti dell'agente, senza
+    bisogno di selezionare un giro. Risultati arricchiti con stato/sospesi/
+    ultime azioni come la lista del giro. Limite 60 risultati."""
+    s = (q or "").strip()
+    if not s:
+        return []
+    query: dict = {"deleted_at": None}
+    if user.get("role") != "admin":
+        query["agent"] = user["username"]
+    rx = {"$regex": re.escape(s), "$options": "i"}
+    query["$or"] = [{"ragione_sociale": rx}, {"citta": rx}]
+    docs = await db.clients.find(query, {"_id": 0}).to_list(400)
+    docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
+    docs = docs[:60]
+    ids = [d["id"] for d in docs]
+    handled = await _handled_today_ids(ids)
+    suspensions = await _active_suspensions_for(ids)
+    last_ev = await _last_events_for(ids, ["order", "collection"])
+    result = []
+    for d in docs:
+        pub = client_public(d)
+        pub["status"] = _compute_status(d, handled)
+        pub["handled_today"] = d["id"] in handled
+        pub["suspensions"] = suspensions.get(d["id"], [])
+        pub["last_order_at"] = iso(last_ev["order"].get(d["id"]))
+        pub["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
+        result.append(pub)
+    return result
+
+
 @api.post("/clients")
 async def create_client(body: ClientCreate, user=Depends(get_current_user)):
     if not body.ragione_sociale.strip():
@@ -846,7 +961,7 @@ async def create_client(body: ClientCreate, user=Depends(get_current_user)):
         "id": str(uuid.uuid4()),
         "ragione_sociale": body.ragione_sociale.strip(),
         "codice_azienda": "",
-        "provincia": body.provincia.strip(),
+        "provincia": normalize_provincia(body.provincia),
         "giro_id": body.giro_id,
         "position": body.position if body.position is not None else 999,
         "citta": body.citta.strip(),
@@ -884,6 +999,8 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
     update = {k: v for k, v in body.dict(exclude_unset=True).items()}
     if not update:
         raise HTTPException(status_code=400, detail="Nessun dato")
+    if "provincia" in update:
+        update["provincia"] = normalize_provincia(update["provincia"])
     target = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
@@ -988,6 +1105,9 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
     now = now_utc()
+    # Data dell'attività scelta dall'utente (default: adesso). Consente di
+    # registrare ordini/visite/incassi effettuati nei giorni precedenti.
+    base = parse_activity_date(body.activity_date, now)
     doc = {
         "id": str(uuid.uuid4()),
         "client_id": body.client_id,
@@ -1000,7 +1120,7 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         "due_at": None,
         "source": None,
         "agent": user["username"],
-        "created_at": now,
+        "created_at": base,
         "deleted_at": None,
     }
 
@@ -1021,7 +1141,7 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
             doc["payment_mode"] = body.payment_mode
             days = PAYMENT_MODES[body.payment_mode]["days"]
             if days is not None:
-                doc["due_at"] = now + timedelta(days=days)
+                doc["due_at"] = base + timedelta(days=days)
 
     if body.type == "suspension":
         doc["source"] = "manual"
@@ -1051,7 +1171,7 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
     if body.type == "visit":
         await db.clients.update_one(
             {"id": body.client_id},
-            {"$set": {"last_visit_at": now, "snoozed_until": None}},
+            {"$set": {"last_visit_at": base, "snoozed_until": None}},
         )
 
     return event_public(doc)
@@ -1394,7 +1514,7 @@ async def add_recurrence_member(company: str, body: RecurrenceMemberCreate, user
             "id": client_id,
             "ragione_sociale": body.ragione_sociale.strip(),
             "codice_azienda": "",
-            "provincia": (body.provincia or "").strip(),
+            "provincia": normalize_provincia(body.provincia),
             "giro_id": None,
             "position": 999,
             "citta": (body.citta or "").strip(),

@@ -15,6 +15,7 @@ import {
 
 import { apiPost, Client, Company, PaymentMode } from "@/src/api";
 import { AppText, Button } from "@/src/components/ui";
+import { ActivityDateField, toISODate } from "@/src/components/activity-date-field";
 import { fonts, radius, spacing, useTheme } from "@/src/theme";
 
 export type QuickActionsRef = {
@@ -48,6 +49,7 @@ export const QuickActionsSheet = forwardRef<
   const [busy, setBusy] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [orderCompany, setOrderCompany] = useState<Company | null>(null);
+  const [activityDate, setActivityDate] = useState<Date>(new Date());
 
   useImperativeHandle(ref, () => ({
     present: (c: Client) => {
@@ -55,6 +57,7 @@ export const QuickActionsSheet = forwardRef<
       setMode("main");
       setNote("");
       setOrderCompany(null);
+      setActivityDate(new Date());
       modalRef.current?.present();
     },
     dismiss: () => modalRef.current?.dismiss(),
@@ -66,7 +69,7 @@ export const QuickActionsSheet = forwardRef<
     if (!client || busy) return;
     setBusy(true);
     try {
-      await apiPost("/events", { client_id: client.id, ...payload });
+      await apiPost("/events", { client_id: client.id, activity_date: toISODate(activityDate), ...payload });
       modalRef.current?.dismiss();
       onSuccess(successMsg);
     } catch (e: any) {
@@ -226,6 +229,7 @@ export const QuickActionsSheet = forwardRef<
                   <CaretLeft size={16} color={colors.brand} weight="bold" />
                   <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
                 </Pressable>
+                <ActivityDateField value={activityDate} onChange={setActivityDate} />
                 <AppText style={styles.hint}>Modalità di pagamento (solo per questo ordine)</AppText>
                 {paymentModes.map((pm) => (
                   <Pressable
@@ -249,6 +253,7 @@ export const QuickActionsSheet = forwardRef<
 
         {mode === "collection" ? (
           <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
+            <ActivityDateField value={activityDate} onChange={setActivityDate} />
             <AppText style={styles.hint}>Azienda di cui registrare l&apos;incasso (chiude il sospeso)</AppText>
             {companies.map((co) => (
               <Pressable
@@ -267,6 +272,7 @@ export const QuickActionsSheet = forwardRef<
 
         {mode === "suspension" ? (
           <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
+            <ActivityDateField value={activityDate} onChange={setActivityDate} />
             <AppText style={styles.hint}>Azienda del sospeso da segnare come attivo</AppText>
             {companies.map((co) => (
               <Pressable
@@ -335,6 +341,7 @@ export const QuickActionsSheet = forwardRef<
 
         {mode === "note" ? (
           <View style={{ gap: spacing.md }}>
+            <ActivityDateField value={activityDate} onChange={setActivityDate} />
             <TextInput
               testID="note-input"
               value={note}

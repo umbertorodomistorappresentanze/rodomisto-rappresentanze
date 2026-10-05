@@ -10,6 +10,7 @@ import { apiGet, apiPost, Client, Giro } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { normalizeProvincia } from "@/src/utils/provincia";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 export default function NewClient() {
@@ -47,7 +48,7 @@ export default function NewClient() {
     mutationFn: () =>
       apiPost<Client>("/clients", {
         ragione_sociale: form.ragione_sociale.trim(),
-        provincia: form.provincia.trim(),
+        provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
         indirizzo: form.indirizzo.trim(),
@@ -133,7 +134,21 @@ export default function NewClient() {
         </View>
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="f-position" />
-        <LabeledInput label="Provincia" value={form.provincia} onChange={set("provincia")} testID="f-provincia" />
+        <View>
+          <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
+          <TextInput
+            testID="f-provincia"
+            value={form.provincia}
+            onChangeText={set("provincia")}
+            onBlur={() => setForm((f) => ({ ...f, provincia: normalizeProvincia(f.provincia) }))}
+            onEndEditing={() => setForm((f) => ({ ...f, provincia: normalizeProvincia(f.provincia) }))}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="CZ"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+          />
+        </View>
         <LabeledInput label="Città" value={form.citta} onChange={set("citta")} testID="f-citta" />
         <LabeledInput label="Zona / destinazione" value={form.zona} onChange={set("zona")} testID="f-zona" />
         <LabeledInput label="Indirizzo" value={form.indirizzo} onChange={set("indirizzo")} testID="f-indirizzo" />

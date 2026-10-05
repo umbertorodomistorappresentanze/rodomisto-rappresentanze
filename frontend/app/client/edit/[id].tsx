@@ -10,6 +10,7 @@ import { apiGet, apiPut, Client, Giro } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { normalizeProvincia } from "@/src/utils/provincia";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 export default function EditClient() {
@@ -58,7 +59,7 @@ export default function EditClient() {
     mutationFn: () =>
       apiPut<Client>(`/clients/${id}`, {
         ragione_sociale: form.ragione_sociale.trim(),
-        provincia: form.provincia.trim(),
+        provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
         indirizzo: form.indirizzo.trim(),
@@ -139,7 +140,21 @@ export default function EditClient() {
         </View>
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="e-position" />
-        <LabeledInput label="Provincia" value={form.provincia} onChange={set("provincia")} testID="e-provincia" />
+        <View>
+          <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
+          <TextInput
+            testID="e-provincia"
+            value={form.provincia}
+            onChangeText={set("provincia")}
+            onBlur={() => setForm((f) => ({ ...f, provincia: normalizeProvincia(f.provincia) }))}
+            onEndEditing={() => setForm((f) => ({ ...f, provincia: normalizeProvincia(f.provincia) }))}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="CZ"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+          />
+        </View>
         <LabeledInput label="Città" value={form.citta} onChange={set("citta")} testID="e-citta" />
         <LabeledInput label="Zona / destinazione" value={form.zona} onChange={set("zona")} testID="e-zona" />
         <LabeledInput label="Indirizzo" value={form.indirizzo} onChange={set("indirizzo")} testID="e-indirizzo" />
