@@ -3,14 +3,29 @@ import { storage } from "@/src/utils/storage";
 
 // URL base del backend.
 // - Anteprima Emergent: EXPO_PUBLIC_BACKEND_URL è impostata (.env) → la usa.
-// - Produzione web (Vercel): se la variabile è vuota OPPURE punta per errore al
-//   dominio frontend (*.vercel.app), si forza il backend su Render per evitare
-//   chiamate verso un'origine priva di API ("Errore di rete" / 404).
+// - Produzione web (Vercel): se la variabile è vuota, malformata (es. link
+//   Markdown "[url](url)"), o punta per errore al dominio frontend (*.vercel.app),
+//   si forza/pulisce verso il backend su Render per evitare "Errore di rete",
+//   404 o "URL is not valid" causati da valori non puliti.
 const RENDER_BACKEND = "https://rodomisto-backend.onrender.com";
+
+// Estrae un URL http(s) pulito da una stringa che potrebbe contenere spazi,
+// un link Markdown [testo](https://...), apici o slash finali.
+function cleanUrl(raw: string): string {
+  let s = (raw || "").trim();
+  const md = s.match(/\((https?:\/\/[^)]+)\)/); // [testo](https://...)
+  if (md) s = md[1];
+  const m = s.match(/https?:\/\/[^\s\])}>'"`]+/); // prima occorrenza di http(s)://...
+  if (m) s = m[0];
+  return s.replace(/\/+$/, ""); // rimuove gli slash finali
+}
+
 function resolveBase(): string {
-  const env = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim();
+  const env = cleanUrl(process.env.EXPO_PUBLIC_BACKEND_URL || "");
   if (!env) return RENDER_BACKEND;
   if (/vercel\.app/i.test(env)) return RENDER_BACKEND;
+  // Se, dopo la pulizia, non è un URL http(s) valido → fallback su Render.
+  if (!/^https?:\/\//i.test(env)) return RENDER_BACKEND;
   return env;
 }
 const BASE = resolveBase();
