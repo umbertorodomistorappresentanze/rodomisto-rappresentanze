@@ -285,6 +285,7 @@ class ClientCreate(BaseModel):
     cap: str = ""
     telefono: str = ""
     email: str = ""
+    partita_iva: str = ""
     agent: Optional[str] = None
 
 
@@ -299,6 +300,7 @@ class ClientUpdate(BaseModel):
     cap: Optional[str] = None
     telefono: Optional[str] = None
     email: Optional[str] = None
+    partita_iva: Optional[str] = None
     permanent_note: Optional[str] = None
     agent: Optional[str] = None
 
@@ -336,6 +338,7 @@ def client_public(doc: dict) -> dict:
         "permanent_note": doc.get("permanent_note", ""),
         "last_visit_at": iso(doc.get("last_visit_at")),
         "snoozed_until": iso(doc.get("snoozed_until")),
+        "partita_iva": (doc.get("extra") or {}).get("partita_iva", ""),
         "extra": doc.get("extra", {}),
     }
 
@@ -984,7 +987,7 @@ async def create_client(body: ClientCreate, user=Depends(get_current_user)):
         "permanent_note": "",
         "last_visit_at": None,
         "snoozed_until": None,
-        "extra": {},
+        "extra": {"partita_iva": (body.partita_iva or "").strip()},
         "created_by": user["username"],
         "deleted_at": None,
         "created_at": now_utc(),
@@ -1021,6 +1024,8 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
         if user.get("role") != "admin" or update["agent"] not in VALID_AGENTS:
             update.pop("agent", None)
     set_doc = dict(update)
+    if "partita_iva" in set_doc:
+        set_doc["extra.partita_iva"] = (set_doc.pop("partita_iva") or "").strip()
     if update.get("giro_id"):
         set_doc["extra.needs_review"] = False
     await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": set_doc})

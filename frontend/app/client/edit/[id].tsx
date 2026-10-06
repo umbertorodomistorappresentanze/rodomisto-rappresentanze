@@ -28,7 +28,7 @@ export default function EditClient() {
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
 
   const [form, setForm] = useState({
-    ragione_sociale: "", provincia: "", citta: "", zona: "",
+    ragione_sociale: "", partita_iva: "", provincia: "", citta: "", zona: "",
     indirizzo: "", cap: "", telefono: "", email: "", position: "",
   });
   const [giroId, setGiroId] = useState<string | null>(null);
@@ -40,6 +40,7 @@ export default function EditClient() {
     if (!c) return;
     setForm({
       ragione_sociale: c.ragione_sociale ?? "",
+      partita_iva: c.partita_iva ?? (c.extra?.partita_iva ?? ""),
       provincia: c.provincia ?? "",
       citta: c.citta ?? "",
       zona: c.zona ?? "",
@@ -59,6 +60,7 @@ export default function EditClient() {
     mutationFn: () =>
       apiPut<Client>(`/clients/${id}`, {
         ragione_sociale: form.ragione_sociale.trim(),
+        partita_iva: form.partita_iva.trim(),
         provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
@@ -98,6 +100,7 @@ export default function EditClient() {
         keyboardShouldPersistTaps="handled"
       >
         <LabeledInput label="Ragione sociale *" value={form.ragione_sociale} onChange={set("ragione_sociale")} testID="e-ragione" />
+        <LabeledInput label="Partita IVA / Codice Fiscale" value={form.partita_iva} onChange={set("partita_iva")} autoCapitalize="characters" testID="e-partita-iva" />
 
         {isAdmin ? (
           <View>
@@ -178,8 +181,8 @@ export default function EditClient() {
 }
 
 function LabeledInput({
-  label, value, onChange, keyboardType, testID,
-}: { label: string; value: string; onChange: (v: string) => void; keyboardType?: any; testID: string }) {
+  label, value, onChange, keyboardType, autoCapitalize, testID,
+}: { label: string; value: string; onChange: (v: string) => void; keyboardType?: any; autoCapitalize?: "none" | "sentences" | "words" | "characters"; testID: string }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
@@ -190,7 +193,7 @@ function LabeledInput({
         value={value}
         onChangeText={onChange}
         keyboardType={keyboardType}
-        autoCapitalize={keyboardType === "email-address" ? "none" : "sentences"}
+        autoCapitalize={autoCapitalize ?? (keyboardType === "email-address" ? "none" : "sentences")}
         placeholderTextColor={colors.muted}
         style={styles.input}
       />

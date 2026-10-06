@@ -1,5 +1,10 @@
 # AgendaVisite — PRD
 
+## Iter 31 (2026-10-06) — Campo Partita IVA / Codice Fiscale modificabile
+- Aggiunto il campo "Partita IVA / Codice Fiscale" nei form Nuovo cliente (f-partita-iva) e Modifica anagrafica (e-partita-iva), subito sotto la Ragione Sociale, autoCapitalize characters. Permette di correggere P.IVA errate e risolvere le segnalazioni duplicati in Da Verificare.
+- Backend: ClientCreate.partita_iva e ClientUpdate.partita_iva; salvato in extra.partita_iva (update usa path dotted extra.partita_iva così non sovrascrive altri campi extra). client_public ora espone partita_iva top-level. LabeledInput esteso con prop autoCapitalize.
+- Verificato via requests: create/update/get della P.IVA OK (extra.partita_iva aggiornato); smoke frontend: campo presente nel form Nuovo cliente.
+
 ## Iter 30 (2026-10-06) — Avviso sospesi su scheda cliente + Incasso dalla lista promemoria
 - #1 BANNER SOSPESI nel QuickActionsSheet (da giro o ricerca libera): banner "Forniture in sospeso" con azienda + scadenza. Fonte: GET /api/clients/{id}/pending-suspensions (tutti i non incassati, kind overdue|pending). Autorizzazione per agente.
 - #2 INCASSO DA /sospesi: pulsante "Incassa" per riga -> modale con Data incasso (default oggi) + modalità Contanti/Bonifico(+data bonifico)/Assegno -> registra collection e il sospeso sparisce. Backend: EventCreate.collection_method/collection_ref_date; collection created_at a FINE giornata (Roma) della data scelta per saldare tutto fino a quel giorno; list_suspensions e event_public espongono i nuovi campi.
