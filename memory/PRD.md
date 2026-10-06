@@ -1,5 +1,10 @@
 # AgendaVisite — PRD
 
+## Iter 30 (2026-10-06) — Avviso sospesi su scheda cliente + Incasso dalla lista promemoria
+- #1 BANNER SOSPESI nel QuickActionsSheet (da giro o ricerca libera): banner "Forniture in sospeso" con azienda + scadenza. Fonte: GET /api/clients/{id}/pending-suspensions (tutti i non incassati, kind overdue|pending). Autorizzazione per agente.
+- #2 INCASSO DA /sospesi: pulsante "Incassa" per riga -> modale con Data incasso (default oggi) + modalità Contanti/Bonifico(+data bonifico)/Assegno -> registra collection e il sospeso sparisce. Backend: EventCreate.collection_method/collection_ref_date; collection created_at a FINE giornata (Roma) della data scelta per saldare tutto fino a quel giorno; list_suspensions e event_public espongono i nuovi campi.
+- Testing iter14: backend 10/10 pytest, frontend 7/7, per umberto e andrea. Nessun bug.
+
 ## Iter 29 (2026-10-05) — Contatori DA VISITARE / GESTITI su base MENSILE
 - Cambiata la logica di stato cliente da giornaliera (handled oggi + ciclo 21 giorni su last_visit_at) a MENSILE. GESTITO = cliente con almeno un'attività (order/visit/collection/note) dal 1° del mese corrente; reset automatico il 1° di ogni mese. Mantenuta la logica "visita rimandata" (snoozed_until futuro → gestito). Rimosso il vincolo dei 21 giorni da _compute_status.
 - Backend: nuovo start_of_month_utc(); _handled_today_ids → _handled_month_ids (eventi dal 1° del mese, type in order/visit/collection/note). _compute_status ora: gestito se handled nel mese O snoozed futuro, altrimenti da_visitare. Applicato a GET /api/clients e /api/clients/search. Campo esposto rinominato handled_today → handled_this_month.

@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetView } from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
@@ -10,12 +11,14 @@ import {
   NotePencil,
   Storefront,
   Warning,
+  WarningCircle,
   X,
 } from "phosphor-react-native";
 
-import { apiPost, Client, Company, PaymentMode } from "@/src/api";
+import { apiGet, apiPost, Client, Company, PaymentMode, PendingSuspension } from "@/src/api";
 import { AppText, Button } from "@/src/components/ui";
 import { ActivityDateField, toISODate } from "@/src/components/activity-date-field";
+import { dmyDate } from "@/src/format";
 import { fonts, radius, spacing, useTheme } from "@/src/theme";
 
 export type QuickActionsRef = {
@@ -50,6 +53,13 @@ export const QuickActionsSheet = forwardRef<
   const [showPicker, setShowPicker] = useState(false);
   const [orderCompany, setOrderCompany] = useState<Company | null>(null);
   const [activityDate, setActivityDate] = useState<Date>(new Date());
+
+  const pendingQuery = useQuery({
+    queryKey: ["pending-suspensions", client?.id],
+    queryFn: () => apiGet<PendingSuspension[]>(`/clients/${client!.id}/pending-suspensions`),
+    enabled: !!client?.id,
+  });
+  const pending = pendingQuery.data ?? [];
 
   useImperativeHandle(ref, () => ({
     present: (c: Client) => {
@@ -160,6 +170,23 @@ export const QuickActionsSheet = forwardRef<
               : "Nota della visita"
           }
         />
+
+        {mode === "main" && pending.length > 0 ? (
+          <View style={styles.banner}>
+            <WarningCircle size={20} color={colors.warning} weight="fill" />
+            <View style={{ flex: 1, gap: 2 }}>
+              <AppText weight="bold" style={styles.bannerTitle}>Forniture in sospeso</AppText>
+              {pending.map((p, i) => (
+                <AppText key={`${p.company_name}-${i}`} style={styles.bannerText}>
+                  • {p.company_name}
+                  {p.due_at
+                    ? (p.kind === "overdue" ? ` — scaduta il ${dmyDate(p.due_at)}` : ` — scade il ${dmyDate(p.due_at)}`)
+                    : " — sospeso attivo"}
+                </AppText>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {mode === "main" ? (
           <View style={styles.grid}>
@@ -380,6 +407,18 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       justifyContent: "center",
     },
     grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+    banner: {
+      flexDirection: "row",
+      gap: spacing.sm,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.warning,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+    },
+    bannerTitle: { fontSize: 13, color: c.onSurface },
+    bannerText: { fontSize: 13, color: c.onSurfaceSecondary },
     tile: {
       width: "47.5%",
       borderRadius: radius.md,

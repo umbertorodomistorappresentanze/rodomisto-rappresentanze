@@ -84,6 +84,8 @@ export default function Dashboard() {
     qc.invalidateQueries({ queryKey: ["clients", activeGiroId] });
     qc.invalidateQueries({ queryKey: ["client-search"] });
     qc.invalidateQueries({ queryKey: ["activities"] });
+    qc.invalidateQueries({ queryKey: ["suspensions"] });
+    qc.invalidateQueries({ queryKey: ["pending-suspensions"] });
   }
 
   const openActions = (c: Client) => sheetRef.current?.present(c);

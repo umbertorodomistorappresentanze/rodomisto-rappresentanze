@@ -312,6 +312,8 @@ class EventCreate(BaseModel):
     reschedule_date: Optional[str] = None  # ISO date string
     payment_mode: Optional[str] = None  # for orders
     activity_date: Optional[str] = None  # data attività (ISO o YYYY-MM-DD); default oggi
+    collection_method: Optional[str] = None  # per incassi: contanti | bonifico | assegno
+    collection_ref_date: Optional[str] = None  # per bonifico: data del bonifico (ISO)
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +356,8 @@ def event_public(doc: dict) -> dict:
         "payment_mode": doc.get("payment_mode"),
         "payment_mode_label": PAYMENT_MODES.get(doc.get("payment_mode"), {}).get("label") if doc.get("payment_mode") else None,
         "due_at": iso(doc.get("due_at")),
+        "collection_method": doc.get("collection_method"),
+        "collection_ref_date": doc.get("collection_ref_date"),
     }
 
 
@@ -1125,6 +1129,8 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         "payment_mode": None,
         "due_at": None,
         "source": None,
+        "collection_method": None,
+        "collection_ref_date": None,
         "agent": user["username"],
         "created_at": base,
         "deleted_at": None,
@@ -1151,6 +1157,18 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
 
     if body.type == "suspension":
         doc["source"] = "manual"
+
+    if body.type == "collection":
+        # L'incasso salda tutto ciò che risulta in sospeso FINO al giorno scelto
+        # (incluso): usiamo fine giornata (ora di Roma) come timestamp di confronto.
+        day_end = base.astimezone(ROME).replace(hour=23, minute=59, second=59, microsecond=0)
+        doc["created_at"] = day_end.astimezone(timezone.utc)
+        if body.collection_method:
+            if body.collection_method not in ("contanti", "bonifico", "assegno"):
+                raise HTTPException(status_code=400, detail="Modalità di incasso non valida")
+            doc["collection_method"] = body.collection_method
+            if body.collection_method == "bonifico" and body.collection_ref_date:
+                doc["collection_ref_date"] = body.collection_ref_date
 
     if body.type == "note":
         if not (body.note_text and body.note_text.strip()):
@@ -1280,7 +1298,7 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
     from collections import defaultdict
-    slots = defaultdict(lambda: {"paid": None, "manual": [], "orders": []})
+    slots = defaultdict(lambda: {"paid": None, "manual": [], "orders": [], "company_id": None})
     if cids:
         events = await db.events.find(
             {"client_id": {"$in": cids}, "deleted_at": None,
@@ -1292,6 +1310,8 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
             if not comp:
                 continue
             s = slots[(e["client_id"], comp)]
+            if e.get("company_id"):
+                s["company_id"] = e["company_id"]
             created = _aware(e.get("created_at"))
             if e["type"] == "collection":
                 if s["paid"] is None or (created and created > s["paid"]):
@@ -1327,6 +1347,7 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
             "agent": cli.get("agent", ""),
             "giro_name": gmap.get(cli.get("giro_id")),
             "company_name": comp,
+            "company_id": s.get("company_id"),
         }
         if manual_active or overdue_dues:
             due_at = min(overdue_dues) if overdue_dues else None
@@ -1341,6 +1362,70 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
         kind_rank = 0 if it["kind"] == "overdue" else 1
         return (kind_rank, it["due_at"] or "")
     items.sort(key=_key)
+    return items
+
+
+@api.get("/clients/{client_id}/pending-suspensions")
+async def client_pending_suspensions(client_id: str, user=Depends(get_current_user)):
+    """TUTTE le forniture in sospeso (non incassate) del cliente, indipendentemente
+    dalla finestra di scadenza. Usato per il banner di promemoria quando si apre
+    la scheda azioni di un cliente. Un elemento per (azienda)."""
+    cli = await db.clients.find_one({"id": client_id, "deleted_at": None}, {"_id": 0})
+    if not cli:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    if user.get("role") != "admin" and cli.get("agent") != user["username"]:
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    now = now_utc()
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    from collections import defaultdict
+    slots = defaultdict(lambda: {"paid": None, "manual": [], "orders": [], "company_id": None})
+    events = await db.events.find(
+        {"client_id": client_id, "deleted_at": None,
+         "type": {"$in": ["order", "suspension", "collection"]}},
+        {"_id": 0},
+    ).to_list(100000)
+    for e in events:
+        comp = e.get("company_name") or e.get("company_id")
+        if not comp:
+            continue
+        s = slots[comp]
+        if e.get("company_id"):
+            s["company_id"] = e["company_id"]
+        created = _aware(e.get("created_at"))
+        if e["type"] == "collection":
+            if s["paid"] is None or (created and created > s["paid"]):
+                s["paid"] = created
+        elif e["type"] == "suspension":
+            s["manual"].append(created)
+        elif e["type"] == "order":
+            due = _aware(e.get("due_at"))
+            if due is not None:
+                s["orders"].append((created, due))
+
+    items = []
+    for comp, s in slots.items():
+        paid = s["paid"]
+        manual_active = any(paid is None or (c and c > paid) for c in s["manual"])
+        manual_since = min((c for c in s["manual"] if c and (paid is None or c > paid)), default=None)
+        open_dues = [due for created, due in s["orders"] if (paid is None or (created and created > paid))]
+        if not manual_active and not open_dues:
+            continue
+        due_at = min(open_dues) if open_dues else None
+        is_overdue = bool((due_at and due_at <= now) or (manual_active and due_at is None))
+        items.append({
+            "company_name": comp,
+            "company_id": s.get("company_id"),
+            "kind": "overdue" if is_overdue else "pending",
+            "due_at": iso(due_at),
+            "since": iso(manual_since),
+        })
+    items.sort(key=lambda it: (0 if it["kind"] == "overdue" else 1, it["due_at"] or "z"))
     return items
 
 

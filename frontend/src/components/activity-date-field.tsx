@@ -43,9 +43,11 @@ const QUICK = [
 export function ActivityDateField({
   value,
   onChange,
+  label = "Data dell'attività",
 }: {
   value: Date;
   onChange: (d: Date) => void;
+  label?: string;
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -60,7 +62,7 @@ export function ActivityDateField({
 
   return (
     <View style={styles.wrap}>
-      <AppText weight="medium" style={styles.label}>Data dell&apos;attività</AppText>
+      <AppText weight="medium" style={styles.label}>{label}</AppText>
       <View style={styles.chips}>
         {QUICK.map((q) => {
           const d = startOfDay(new Date(today.getTime() - q.d * 86400000));

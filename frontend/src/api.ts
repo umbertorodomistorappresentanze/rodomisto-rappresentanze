@@ -183,7 +183,16 @@ export type Suspension = {
   agent: string;
   giro_name: string | null;
   company_name: string;
+  company_id: string | null;
   kind: "overdue" | "due_soon";
+  due_at: string | null;
+  since: string | null;
+};
+
+export type PendingSuspension = {
+  company_name: string;
+  company_id: string | null;
+  kind: "overdue" | "pending";
   due_at: string | null;
   since: string | null;
 };

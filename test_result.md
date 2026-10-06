@@ -119,3 +119,10 @@
 - Verificato backend via requests: search OK (38 risultati "bar", con status/suspensions), province (CZ/VV/KR/RC/CS/MI) OK, order con activity_date 5gg fa → created_at corretto. Frontend smoke: ricerca "bar" senza giro → 38 RISULTATI OK.
 - Credenziali: umberto/Umberto2774!, andrea/Andrea1606!.
 - needs_retesting: true.
+
+## Iter 30 (2026-10-06) — Avviso sospesi su scheda cliente + Incasso dalla lista promemoria
+- #1 BANNER SOSPESI: aprendo le azioni rapide di un cliente (QuickActionsSheet, da giro o da ricerca libera) compare in alto un banner giallo "Forniture in sospeso" con azienda + data scadenza ("scade/scaduta il GG/MM/AAAA" o "sospeso attivo"). Dati da nuovo GET /api/clients/{id}/pending-suspensions (TUTTI i sospesi non incassati del cliente, incluse scadenze future, kind overdue|pending).
+- #2 INCASSO DA LISTA: in /sospesi ogni riga ha pulsante verde "Incassa" (testID sos-collect-<client_id>) -> modale con ActivityDateField "Data dell'incasso" (default oggi), chip modalità Contanti/Bonifico/Assegno (testID collect-method-contanti|bonifico|assegno); se Bonifico compare "Data del bonifico"; pulsante Conferma (testID collect-confirm). Registra evento collection e il sospeso sparisce (invalidate suspensions).
+- Backend: EventCreate.collection_method (contanti|bonifico|assegno) + collection_ref_date; create_event type collection imposta created_at a FINE giornata (Roma) della data scelta così salda tutti i sospesi fino a quel giorno incluso. list_suspensions items ora includono company_id.
+- Verificato via requests: pending-suspensions mostra ordine differito futuro (kind pending) + sospeso manuale (overdue); dopo collection contanti/bonifico il pending torna vuoto (saldato). Vale per umberto e andrea.
+- needs_retesting: true.
