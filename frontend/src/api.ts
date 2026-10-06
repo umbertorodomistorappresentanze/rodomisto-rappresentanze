@@ -139,7 +139,7 @@ export type Client = {
   snoozed_until: string | null;
   extra: ClientExtra;
   status?: "da_visitare" | "gestito";
-  handled_today?: boolean;
+  handled_this_month?: boolean;
   suspensions?: string[];
   partita_iva?: string;
   duplicates?: { id: string; ragione_sociale: string; citta: string; agent: string }[];

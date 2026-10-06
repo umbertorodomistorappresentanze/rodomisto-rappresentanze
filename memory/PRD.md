@@ -1,5 +1,10 @@
 # AgendaVisite — PRD
 
+## Iter 29 (2026-10-05) — Contatori DA VISITARE / GESTITI su base MENSILE
+- Cambiata la logica di stato cliente da giornaliera (handled oggi + ciclo 21 giorni su last_visit_at) a MENSILE. GESTITO = cliente con almeno un'attività (order/visit/collection/note) dal 1° del mese corrente; reset automatico il 1° di ogni mese. Mantenuta la logica "visita rimandata" (snoozed_until futuro → gestito). Rimosso il vincolo dei 21 giorni da _compute_status.
+- Backend: nuovo start_of_month_utc(); _handled_today_ids → _handled_month_ids (eventi dal 1° del mese, type in order/visit/collection/note). _compute_status ora: gestito se handled nel mese O snoozed futuro, altrimenti da_visitare. Applicato a GET /api/clients e /api/clients/search. Campo esposto rinominato handled_today → handled_this_month.
+- Vale per umberto e andrea. Verificato via requests: ordine questo mese→gestito, mese scorso→da_visitare, nessuna attività→da_visitare.
+
 ## Iter 28 (2026-10-05) — Ricerca libera dashboard + Data attività + Sigla provincia (per umberto e andrea)
 - #1 RICERCA LIBERA: Dashboard mostra SEMPRE la barra di ricerca (anche senza giro). Nuovo GET /api/clients/search?q= (ragione_sociale O citta, filtro agente se non admin, limit 60, arricchito con status/suspensions/last_order_at/last_collection_at). Si apre il bottom sheet azioni su qualunque cliente trovato.
 - #2 DATA ATTIVITA': ActivityDateField (chip Oggi/Ieri/2gg/3gg + input GG/MM/AAAA su web, DateTimePicker su native) in order/collection/suspension/note del QuickActionsSheet. Backend EventCreate.activity_date (ISO o YYYY-MM-DD) → created_at, due_at base ordini, last_visit_at visite. Helper parse_activity_date (Rome mezzogiorno).

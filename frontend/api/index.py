@@ -180,6 +180,14 @@ def start_of_today_utc() -> datetime:
     return start_local.astimezone(timezone.utc)
 
 
+def start_of_month_utc() -> datetime:
+    """Mezzanotte (ora di Roma) del 1° giorno del mese corrente, in UTC.
+    I contatori DA VISITARE / GESTITI si azzerano a questo istante ogni mese."""
+    local = datetime.now(ROME)
+    start_local = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start_local.astimezone(timezone.utc)
+
+
 def hash_pw(pw: str) -> str:
     return bcrypt.hashpw(pw.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
 
@@ -731,13 +739,15 @@ async def delete_giro(giro_id: str, user=Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Clients
 # ---------------------------------------------------------------------------
-async def _handled_today_ids(client_ids: List[str]) -> set:
+async def _handled_month_ids(client_ids: List[str]) -> set:
+    """Clienti con almeno un'attività (ordine, visita, incasso, nota) nel MESE
+    corrente. Base per il conteggio GESTITI mensile (reset il 1° del mese)."""
     if not client_ids:
         return set()
-    start = start_of_today_utc()
+    start = start_of_month_utc()
     cursor = db.events.find(
         {"client_id": {"$in": client_ids}, "created_at": {"$gte": start}, "deleted_at": None,
-         "type": {"$nin": ["suspension"]}},
+         "type": {"$in": ["order", "visit", "collection", "note"]}},
         {"_id": 0, "client_id": 1},
     )
     ids = set()
@@ -821,9 +831,12 @@ async def _last_events_for(client_ids: List[str], types: List[str]) -> dict:
     return out
 
 
-def _compute_status(doc: dict, handled_today: set) -> str:
+def _compute_status(doc: dict, handled_month: set) -> str:
+    """Logica MENSILE: un cliente è GESTITO se ha avuto almeno un'attività
+    (ordine/visita/incasso/nota) nel mese corrente, oppure se è stato rimandato
+    a una data futura. Altrimenti è DA VISITARE. Reset automatico il 1° del mese."""
     now = now_utc()
-    if doc["id"] in handled_today:
+    if doc["id"] in handled_month:
         return "gestito"
     snoozed = doc.get("snoozed_until")
     if snoozed is not None:
@@ -831,14 +844,7 @@ def _compute_status(doc: dict, handled_today: set) -> str:
             snoozed = snoozed.replace(tzinfo=timezone.utc)
         if snoozed > now:
             return "gestito"
-    lv = doc.get("last_visit_at")
-    if lv is None:
-        return "da_visitare"
-    if lv.tzinfo is None:
-        lv = lv.replace(tzinfo=timezone.utc)
-    if lv <= now - timedelta(days=VISIT_THRESHOLD_DAYS):
-        return "da_visitare"
-    return "gestito"
+    return "da_visitare"
 
 
 @api.get("/clients")
@@ -848,14 +854,14 @@ async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)
     ).to_list(5000)
     docs.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
     ids = [d["id"] for d in docs]
-    handled = await _handled_today_ids(ids)
+    handled = await _handled_month_ids(ids)
     suspensions = await _active_suspensions_for(ids)
     last_ev = await _last_events_for(ids, ["order", "collection"])
     result = []
     for d in docs:
         pub = client_public(d)
         pub["status"] = _compute_status(d, handled)
-        pub["handled_today"] = d["id"] in handled
+        pub["handled_this_month"] = d["id"] in handled
         pub["suspensions"] = suspensions.get(d["id"], [])
         pub["last_order_at"] = iso(last_ev["order"].get(d["id"]))
         pub["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
@@ -935,14 +941,14 @@ async def search_clients(q: str = Query("", alias="q"), user=Depends(get_current
     docs.sort(key=lambda d: d.get("ragione_sociale", "").lower())
     docs = docs[:60]
     ids = [d["id"] for d in docs]
-    handled = await _handled_today_ids(ids)
+    handled = await _handled_month_ids(ids)
     suspensions = await _active_suspensions_for(ids)
     last_ev = await _last_events_for(ids, ["order", "collection"])
     result = []
     for d in docs:
         pub = client_public(d)
         pub["status"] = _compute_status(d, handled)
-        pub["handled_today"] = d["id"] in handled
+        pub["handled_this_month"] = d["id"] in handled
         pub["suspensions"] = suspensions.get(d["id"], [])
         pub["last_order_at"] = iso(last_ev["order"].get(d["id"]))
         pub["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
