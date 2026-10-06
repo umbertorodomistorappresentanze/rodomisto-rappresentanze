@@ -1206,9 +1206,56 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
     return event_public(doc)
 
 
-# ---------------------------------------------------------------------------
-# Activities feed (Ultimi aggiornamenti / Storico) — read only
-# ---------------------------------------------------------------------------
+class EventUpdate(BaseModel):
+    payment_mode: Optional[str] = None
+    activity_date: Optional[str] = None
+
+
+async def _event_auth(event_id: str, user) -> dict:
+    ev = await db.events.find_one({"id": event_id, "deleted_at": None}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    cli = await db.clients.find_one({"id": ev["client_id"]}, {"_id": 0})
+    if user.get("role") != "admin" and (not cli or cli.get("agent") != user["username"]):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+    return ev
+
+
+@api.put("/events/{event_id}")
+async def update_event(event_id: str, body: EventUpdate, user=Depends(get_current_user)):
+    """Modifica un evento già registrato. Per gli ordini consente di cambiare i
+    termini di pagamento (ricalcolando la scadenza) e/o la data dell'attività."""
+    ev = await _event_auth(event_id, user)
+    update: dict = {}
+    created = ev.get("created_at")
+    if created is not None and created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if body.activity_date:
+        created = parse_activity_date(body.activity_date, created or now_utc())
+        update["created_at"] = created
+    if ev["type"] == "order":
+        pm = body.payment_mode if body.payment_mode is not None else ev.get("payment_mode")
+        if pm is not None and pm not in PAYMENT_MODES:
+            raise HTTPException(status_code=400, detail="Modalità di pagamento non valida")
+        if body.payment_mode is not None:
+            update["payment_mode"] = pm
+        if ("payment_mode" in update) or ("created_at" in update):
+            days = PAYMENT_MODES.get(pm, {}).get("days") if pm else None
+            update["due_at"] = (created + timedelta(days=days)) if (days is not None and created) else None
+    if not update:
+        raise HTTPException(status_code=400, detail="Nessuna modifica")
+    await db.events.update_one({"id": event_id}, {"$set": update})
+    doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return event_public(doc)
+
+
+@api.delete("/events/{event_id}")
+async def delete_event(event_id: str, user=Depends(get_current_user)):
+    """Elimina (soft-delete) un evento: lo rimuove da storico, promemoria sospesi
+    e banner informativo."""
+    await _event_auth(event_id, user)
+    await db.events.update_one({"id": event_id}, {"$set": {"deleted_at": now_utc()}})
+    return {"ok": True}
 ACTIVITY_TYPES = ["order", "collection", "suspension", "reschedule"]
 ACTIVITY_TYPE_LABELS = {
     "order": "Ordine effettuato",
@@ -1322,27 +1369,23 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
                 if s["paid"] is None or (created and created > s["paid"]):
                     s["paid"] = created
             elif e["type"] == "suspension":
-                s["manual"].append(created)
+                s["manual"].append((created, e["id"]))
             elif e["type"] == "order":
                 due = _aware(e.get("due_at"))
                 if due is not None:
-                    s["orders"].append((created, due))
+                    s["orders"].append((created, due, e["id"], e.get("payment_mode")))
 
     items = []
     for (cid, comp), s in slots.items():
         paid = s["paid"]
-        manual_active = any(paid is None or (c and c > paid) for c in s["manual"])
-        manual_since = min((c for c in s["manual"] if c and (paid is None or c > paid)), default=None)
-        overdue_dues = []
-        duesoon_dues = []
-        for created, due in s["orders"]:
-            unsettled = paid is None or (created and created > paid)
-            if not unsettled:
-                continue
-            if due <= now:
-                overdue_dues.append(due)
-            elif due <= soon:
-                duesoon_dues.append(due)
+        open_manual = sorted(
+            [(c, eid) for (c, eid) in s["manual"] if (paid is None or (c and c > paid))],
+            key=lambda m: m[0] or now,
+        )
+        open_orders = [(c, due, eid, pm) for (c, due, eid, pm) in s["orders"] if (paid is None or (c and c > paid))]
+        overdue_orders = sorted([o for o in open_orders if o[1] <= now], key=lambda o: o[1])
+        duesoon_orders = sorted([o for o in open_orders if now < o[1] <= soon], key=lambda o: o[1])
+        manual_since = open_manual[0][0] if open_manual else None
 
         cli = cmap.get(cid, {})
         base = {
@@ -1354,13 +1397,18 @@ async def list_suspensions(scope: str = Query("all"), user=Depends(get_current_u
             "company_name": comp,
             "company_id": s.get("company_id"),
         }
-        if manual_active or overdue_dues:
-            due_at = min(overdue_dues) if overdue_dues else None
-            items.append({**base, "kind": "overdue", "due_at": iso(due_at),
-                          "since": iso(manual_since)})
-        elif duesoon_dues:
-            items.append({**base, "kind": "due_soon", "due_at": iso(min(duesoon_dues)),
-                          "since": None})
+        if open_manual or overdue_orders:
+            if overdue_orders:
+                _c, due0, eid0, pm0 = overdue_orders[0]
+                items.append({**base, "kind": "overdue", "due_at": iso(due0), "since": iso(manual_since),
+                              "event_id": eid0, "event_type": "order", "payment_mode": pm0})
+            else:
+                items.append({**base, "kind": "overdue", "due_at": None, "since": iso(manual_since),
+                              "event_id": open_manual[0][1], "event_type": "suspension", "payment_mode": None})
+        elif duesoon_orders:
+            _c, due0, eid0, pm0 = duesoon_orders[0]
+            items.append({**base, "kind": "due_soon", "due_at": iso(due0), "since": None,
+                          "event_id": eid0, "event_type": "order", "payment_mode": pm0})
 
     # Ordinamento: prima gli scaduti, poi in scadenza; per data di scadenza crescente.
     def _key(it):

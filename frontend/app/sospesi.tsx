@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { CaretLeft, WarningCircle, Clock, CurrencyEur, X } from "phosphor-react-native";
+import { CaretLeft, WarningCircle, Clock, CurrencyEur, PencilSimple, Trash, X } from "phosphor-react-native";
 
-import { apiGet, apiPost, Company, Suspension } from "@/src/api";
+import { apiDelete, apiGet, apiPost, apiPut, Company, PaymentMode, Suspension } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { ActivityDateField, toISODate } from "@/src/components/activity-date-field";
@@ -48,6 +48,11 @@ export default function SospesiScreen() {
   const [bonificoDate, setBonificoDate] = useState<Date>(new Date());
   const [busy, setBusy] = useState(false);
 
+  // Modifica termini / Elimina
+  const [editItem, setEditItem] = useState<Suspension | null>(null);
+  const [editMode, setEditMode] = useState<string | null>(null);
+  const [deleteItem, setDeleteItem] = useState<Suspension | null>(null);
+
   const query = useQuery({
     queryKey: ["suspensions", scope],
     queryFn: () => apiGet<Suspension[]>(`/suspensions?scope=${scope}`),
@@ -56,6 +61,11 @@ export default function SospesiScreen() {
   const companiesQuery = useQuery({
     queryKey: ["companies"],
     queryFn: () => apiGet<Company[]>("/companies"),
+  });
+
+  const paymentModesQuery = useQuery({
+    queryKey: ["payment-modes"],
+    queryFn: () => apiGet<PaymentMode[]>("/payment-modes"),
   });
 
   const sections = useMemo(() => {
@@ -100,6 +110,49 @@ export default function SospesiScreen() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["pending-suspensions"] });
       qc.invalidateQueries({ queryKey: ["activities"] });
+    } catch (e: any) {
+      toast(e?.detail || "Operazione non riuscita", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ["suspensions"] });
+    qc.invalidateQueries({ queryKey: ["clients"] });
+    qc.invalidateQueries({ queryKey: ["pending-suspensions"] });
+    qc.invalidateQueries({ queryKey: ["activities"] });
+    qc.invalidateQueries({ queryKey: ["history"] });
+  }
+
+  function openEdit(item: Suspension) {
+    setEditItem(item);
+    setEditMode(item.payment_mode ?? null);
+  }
+
+  async function confirmEdit() {
+    if (!editItem || !editMode || busy) return;
+    setBusy(true);
+    try {
+      await apiPut(`/events/${editItem.event_id}`, { payment_mode: editMode });
+      setEditItem(null);
+      toast("Termini aggiornati", "success");
+      invalidateAll();
+    } catch (e: any) {
+      toast(e?.detail || "Operazione non riuscita", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteItem || busy) return;
+    setBusy(true);
+    try {
+      await apiDelete(`/events/${deleteItem.event_id}`);
+      setDeleteItem(null);
+      toast("Sospeso eliminato", "success");
+      invalidateAll();
     } catch (e: any) {
       toast(e?.detail || "Operazione non riuscita", "error");
     } finally {
@@ -174,14 +227,34 @@ export default function SospesiScreen() {
                   ) : null}
                 </View>
               </Pressable>
-              <Pressable
-                testID={`sos-collect-${item.client_id}`}
-                onPress={() => openCollect(item)}
-                style={({ pressed }) => [styles.collectBtn, pressed && { opacity: 0.85 }]}
-              >
-                <CurrencyEur size={18} color={colors.onBrand} weight="bold" />
-                <AppText weight="bold" style={styles.collectText}>Incassa</AppText>
-              </Pressable>
+              <View style={styles.actions}>
+                {item.event_type === "order" ? (
+                  <Pressable
+                    testID={`sos-edit-${item.client_id}`}
+                    onPress={() => openEdit(item)}
+                    style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.8 }]}
+                  >
+                    <PencilSimple size={18} color={colors.brand} weight="bold" />
+                    <AppText weight="semibold" style={styles.iconBtnText}>Modifica</AppText>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  testID={`sos-delete-${item.client_id}`}
+                  onPress={() => setDeleteItem(item)}
+                  style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.8 }]}
+                >
+                  <Trash size={18} color={colors.error} weight="bold" />
+                  <AppText weight="semibold" style={[styles.iconBtnText, { color: colors.error }]}>Elimina</AppText>
+                </Pressable>
+                <Pressable
+                  testID={`sos-collect-${item.client_id}`}
+                  onPress={() => openCollect(item)}
+                  style={({ pressed }) => [styles.collectBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <CurrencyEur size={18} color={colors.onBrand} weight="bold" />
+                  <AppText weight="bold" style={styles.collectText}>Incassa</AppText>
+                </Pressable>
+              </View>
             </View>
           )}
           ListEmptyComponent={
@@ -246,6 +319,75 @@ export default function SospesiScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!editItem} transparent animationType="slide" onRequestClose={() => setEditItem(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <AppText weight="bold" style={styles.modalTitle}>Modifica termini</AppText>
+                {editItem ? (
+                  <AppText style={styles.modalSub} numberOfLines={1}>
+                    {editItem.ragione_sociale} · {editItem.company_name}
+                  </AppText>
+                ) : null}
+              </View>
+              <Pressable testID="edit-close" onPress={() => setEditItem(null)} hitSlop={8} style={styles.closeBtn}>
+                <X size={20} color={colors.onSurfaceSecondary} weight="bold" />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: spacing.sm }} showsVerticalScrollIndicator={false}>
+              <AppText weight="medium" style={styles.fieldLabel}>Termini di pagamento</AppText>
+              <View style={styles.methodRow}>
+                {(paymentModesQuery.data ?? []).map((pm) => {
+                  const on = editMode === pm.key;
+                  return (
+                    <Pressable
+                      key={pm.key}
+                      testID={`edit-mode-${pm.key}`}
+                      onPress={() => setEditMode(pm.key)}
+                      style={[styles.methodChip, on && styles.methodChipOn]}
+                    >
+                      <AppText weight="semibold" style={[styles.methodText, on && { color: colors.onBrand }]}>
+                        {pm.label}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+            <Button
+              testID="edit-confirm"
+              title="Salva termini"
+              onPress={confirmEdit}
+              loading={busy}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!deleteItem} transparent animationType="fade" onRequestClose={() => setDeleteItem(null)}>
+        <View style={styles.modalBackdropCenter}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIcon}>
+              <Trash size={26} color={colors.error} weight="fill" />
+            </View>
+            <AppText weight="bold" style={styles.modalTitle}>Eliminare il sospeso?</AppText>
+            {deleteItem ? (
+              <AppText style={styles.confirmText}>
+                {deleteItem.company_name} · {deleteItem.ragione_sociale}. La segnalazione verrà rimossa dalla lista e dal banner cliente.
+              </AppText>
+            ) : null}
+            <View style={styles.confirmBtns}>
+              <Button title="Annulla" variant="ghost" testID="delete-cancel" onPress={() => setDeleteItem(null)} style={{ flex: 1 }} />
+              <Pressable testID="delete-confirm" onPress={confirmDelete} style={styles.confirmDeleteBtn}>
+                <AppText weight="semibold" style={styles.confirmDeleteText}>{busy ? "..." : "Elimina"}</AppText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -270,11 +412,18 @@ const useStyles = makeStyles((c) => ({
   countBadge: { minWidth: 24, paddingHorizontal: 6, height: 20, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   countText: { fontSize: 11, color: c.onSurfaceSecondary },
   row: {
-    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    flexDirection: "column", gap: spacing.sm,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-    borderRadius: radius.md, padding: spacing.md, minHeight: 64,
+    borderRadius: radius.md, padding: spacing.md,
   },
-  rowMain: { flexDirection: "row", alignItems: "center", gap: spacing.md, flex: 1 },
+  rowMain: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, justifyContent: "flex-end" },
+  iconBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.xs,
+    backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,
+    borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 44,
+  },
+  iconBtnText: { fontSize: 13, color: c.brand },
   dot: { width: 10, height: 10, borderRadius: 5 },
   name: { fontSize: 15, color: c.onSurface },
   meta: { fontSize: 12, color: c.muted, marginTop: 1 },

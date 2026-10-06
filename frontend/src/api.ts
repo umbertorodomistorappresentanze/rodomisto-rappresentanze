@@ -187,6 +187,9 @@ export type Suspension = {
   kind: "overdue" | "due_soon";
   due_at: string | null;
   since: string | null;
+  event_id: string;
+  event_type: "order" | "suspension";
+  payment_mode: string | null;
 };
 
 export type PendingSuspension = {
