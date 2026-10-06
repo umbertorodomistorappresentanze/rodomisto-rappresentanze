@@ -126,3 +126,9 @@
 - Backend: EventCreate.collection_method (contanti|bonifico|assegno) + collection_ref_date; create_event type collection imposta created_at a FINE giornata (Roma) della data scelta così salda tutti i sospesi fino a quel giorno incluso. list_suspensions items ora includono company_id.
 - Verificato via requests: pending-suspensions mostra ordine differito futuro (kind pending) + sospeso manuale (overdue); dopo collection contanti/bonifico il pending torna vuoto (saldato). Vale per umberto e andrea.
 - needs_retesting: true.
+
+## Iter 32 (2026-10-06) — Modifica/Elimina evento da Storico cliente e Ultimi aggiornamenti
+- Nuovo componente riutilizzabile src/components/event-actions.tsx: pulsanti "Modifica" (solo order -> cambia termini pagamento, ricalcola scadenza via PUT /api/events/{id}) e "Elimina" (order/collection/suspension/note/reschedule/visit -> DELETE /api/events/{id} soft-delete). Modali interne (chip modalità da /payment-modes; conferma elimina). Invalida history/activities/suspensions/pending-suspensions/clients.
+- Integrato in: app/client/[id].tsx (ogni riga Storico, escluso recurrence_order) e src/components/updates-panel.tsx ActivityRow (usato in Dashboard "Ultimi aggiornamenti" e in /storico). Backend /activities ora espone client_id e payment_mode.
+- Backend già testato: PUT ricalcola due_at (bonifico_30->agente_60 => +60gg); DELETE rimuove da storico/sospesi/banner; auth per agente. Vale per umberto e andrea.
+- needs_retesting: frontend flows.

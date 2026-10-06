@@ -1316,11 +1316,13 @@ async def list_activities(
             "type_label": ACTIVITY_TYPE_LABELS.get(e["type"], e["type"]),
             "created_at": iso(e.get("created_at")),
             "agent": e.get("agent"),
+            "client_id": e.get("client_id"),
             "client_ragione_sociale": cli.get("ragione_sociale", "") if cli else "",
             "context": context,
             "giro_name": giro_name,
             "citta": cli.get("citta", "") if cli else "",
             "company_name": e.get("company_name"),
+            "payment_mode": e.get("payment_mode"),
         })
     return out
 

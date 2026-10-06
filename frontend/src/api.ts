@@ -152,17 +152,19 @@ export type Activity = {
   type_label: string;
   created_at: string;
   agent: string | null;
+  client_id: string | null;
   client_ragione_sociale: string;
   context: string;
   giro_name: string | null;
   citta: string;
   company_name: string | null;
+  payment_mode?: string | null;
 };
 
 export type VisitEvent = {
   id: string;
   client_id: string;
-  type: "visit" | "order" | "reschedule" | "collection" | "note" | "recurrence_order";
+  type: "visit" | "order" | "reschedule" | "collection" | "note" | "suspension" | "recurrence_order";
   company_id: string | null;
   company_name: string | null;
   note_text: string | null;

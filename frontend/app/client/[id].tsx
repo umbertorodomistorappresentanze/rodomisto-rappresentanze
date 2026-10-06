@@ -26,6 +26,7 @@ import { apiDelete, apiGet, apiPut, Client, Giro, VisitEvent } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { EventActions } from "@/src/components/event-actions";
 import { shortDate, timeShort } from "@/src/format";
 import { lastActionLabel } from "@/src/utils/last-action";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -308,6 +309,7 @@ export default function ClientDetail() {
                       <AppText weight="semibold" style={styles.eventLabel}>{meta.label}</AppText>
                       {detail ? <AppText style={styles.eventDetail}>{detail}</AppText> : null}
                       <AppText style={styles.eventDate}>{shortDate(ev.created_at)} · {timeShort(ev.created_at)}</AppText>
+                      {ev.type !== "recurrence_order" ? <EventActions event={ev} /> : null}
                     </View>
                   </View>
                 );

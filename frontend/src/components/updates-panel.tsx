@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { CaretRight, ClockCounterClockwise } from "phosphor-react-native";
 
-import { Activity, apiGet } from "@/src/api";
+import { Activity, apiGet, VisitEvent } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText } from "@/src/components/ui";
+import { EventActions } from "@/src/components/event-actions";
 import { dateTimeShort, longDate, shortDayDate } from "@/src/format";
 import { storage } from "@/src/utils/storage";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -26,21 +27,36 @@ export function ActivityRow({ item, showAgent }: { item: Activity; showAgent?: b
   const styles = useStyles();
   const { colors } = useTheme();
   const dotColor = colors[TYPE_COLORS[item.type]] as string;
+  const ev: VisitEvent = {
+    id: item.id,
+    client_id: item.client_id ?? "",
+    type: item.type,
+    company_id: null,
+    company_name: item.company_name,
+    note_text: null,
+    reschedule_until: null,
+    agent: item.agent,
+    created_at: item.created_at,
+    payment_mode: item.payment_mode ?? null,
+  };
   return (
-    <View style={styles.row}>
-      <View style={styles.dateBadge}>
-        <AppText weight="semibold" style={styles.dateText}>{shortDayDate(item.created_at)}</AppText>
+    <View style={styles.rowWrap}>
+      <View style={styles.rowTop}>
+        <View style={styles.dateBadge}>
+          <AppText weight="semibold" style={styles.dateText}>{shortDayDate(item.created_at)}</AppText>
+        </View>
+        <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        <View style={{ flex: 1 }}>
+          <AppText weight="semibold" style={styles.typeLabel} numberOfLines={1}>{item.type_label}</AppText>
+          <AppText style={styles.detail} numberOfLines={1}>
+            {item.client_ragione_sociale}{item.context ? ` · ${item.context}` : ""}
+          </AppText>
+        </View>
+        {showAgent && item.agent ? (
+          <AppText style={styles.agent}>{AGENT_SHORT[item.agent] ?? item.agent}</AppText>
+        ) : null}
       </View>
-      <View style={[styles.dot, { backgroundColor: dotColor }]} />
-      <View style={{ flex: 1 }}>
-        <AppText weight="semibold" style={styles.typeLabel} numberOfLines={1}>{item.type_label}</AppText>
-        <AppText style={styles.detail} numberOfLines={1}>
-          {item.client_ragione_sociale}{item.context ? ` · ${item.context}` : ""}
-        </AppText>
-      </View>
-      {showAgent && item.agent ? (
-        <AppText style={styles.agent}>{AGENT_SHORT[item.agent] ?? item.agent}</AppText>
-      ) : null}
+      <EventActions event={ev} />
     </View>
   );
 }
@@ -193,6 +209,16 @@ const useStyles = makeStyles((c) => ({
   chipText: { fontSize: 12, color: c.onSurfaceSecondary },
   chipTextOn: { color: c.onBrand },
   emptyText: { fontSize: 13, color: c.muted, fontStyle: "italic", paddingVertical: spacing.xs },
+  rowWrap: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.divider,
+  },
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",

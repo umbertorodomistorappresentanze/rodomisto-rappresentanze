@@ -1,5 +1,10 @@
 # AgendaVisite — PRD
 
+## Iter 32 (2026-10-06) — Modifica/Elimina evento da Storico cliente e Ultimi aggiornamenti
+- Nuovo componente src/components/event-actions.tsx: "Modifica" (solo ordini, cambia termini e ricalcola scadenza via PUT /api/events/{id}) + "Elimina" (DELETE /api/events/{id} soft-delete) con modali interne. Invalida history/activities/suspensions/pending/clients.
+- Integrato in app/client/[id].tsx (ogni riga Storico, escluso recurrence_order) e in ActivityRow (Dashboard "Ultimi aggiornamenti" + /storico). Backend /activities espone client_id e payment_mode. Suspension item porta event_id/event_type/payment_mode per edit/delete anche dalla lista /sospesi.
+- Testing iter frontend: tutti i flussi OK per umberto e andrea; autorizzazione 403 per andrea su clienti altrui verificata. Backend PUT/DELETE validati (ricalcolo due_at; rimozione da storico/sospesi/banner).
+
 ## Iter 31 (2026-10-06) — Campo Partita IVA / Codice Fiscale modificabile
 - Aggiunto il campo "Partita IVA / Codice Fiscale" nei form Nuovo cliente (f-partita-iva) e Modifica anagrafica (e-partita-iva), subito sotto la Ragione Sociale, autoCapitalize characters. Permette di correggere P.IVA errate e risolvere le segnalazioni duplicati in Da Verificare.
 - Backend: ClientCreate.partita_iva e ClientUpdate.partita_iva; salvato in extra.partita_iva (update usa path dotted extra.partita_iva così non sovrascrive altri campi extra). client_public ora espone partita_iva top-level. LabeledInput esteso con prop autoCapitalize.
