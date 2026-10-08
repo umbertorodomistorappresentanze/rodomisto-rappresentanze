@@ -4,33 +4,57 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PencilSimple, Trash, X } from "phosphor-react-native";
 
 import { apiDelete, apiGet, apiPut, PaymentMode, VisitEvent } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { AppText, Button } from "@/src/components/ui";
+import { ActivityDateField, toISODate } from "@/src/components/activity-date-field";
 import { useToast } from "@/src/components/toast";
 import { radius, spacing, useTheme } from "@/src/theme";
 
 const DELETABLE = ["order", "collection", "suspension", "note", "reschedule", "visit"];
+const COLLECTION_METHODS: { key: string; label: string }[] = [
+  { key: "contanti", label: "Contanti" },
+  { key: "bonifico", label: "Bonifico" },
+  { key: "assegno", label: "Assegno / Titolo" },
+];
 
 export function EventActions({ event }: { event: VisitEvent }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const toast = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
-  const canEdit = event.type === "order";
-  const canDelete = DELETABLE.includes(event.type);
+  // I non-admin possono agire solo sui propri eventi: nascondi i pulsanti sugli altrui.
+  const ownsEvent = user?.role === "admin" || !event.agent || event.agent === user?.username;
+
+  const isOrder = event.type === "order";
+  const isCollection = event.type === "collection";
+  const canEdit = (isOrder || isCollection) && ownsEvent;
+  const canDelete = DELETABLE.includes(event.type) && ownsEvent;
 
   const [editOpen, setEditOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
   const [mode, setMode] = useState<string | null>(event.payment_mode ?? null);
+  const [method, setMethod] = useState<string | null>(event.collection_method ?? null);
+  const [colDate, setColDate] = useState<Date>(new Date());
+  const [bonDate, setBonDate] = useState<Date>(new Date());
   const [busy, setBusy] = useState(false);
 
   const pmQuery = useQuery({
     queryKey: ["payment-modes"],
     queryFn: () => apiGet<PaymentMode[]>("/payment-modes"),
-    enabled: editOpen,
+    enabled: editOpen && isOrder,
   });
 
   if (!canEdit && !canDelete) return null;
+
+  function openEdit() {
+    setMode(event.payment_mode ?? null);
+    setMethod(event.collection_method ?? null);
+    setColDate(event.created_at ? new Date(event.created_at) : new Date());
+    setBonDate(event.collection_ref_date ? new Date(event.collection_ref_date) : new Date());
+    setEditOpen(true);
+  }
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["history"] });
@@ -41,12 +65,24 @@ export function EventActions({ event }: { event: VisitEvent }) {
   }
 
   async function saveEdit() {
-    if (!mode || busy) return;
+    if (busy) return;
+    let payload: any = null;
+    if (isOrder) {
+      if (!mode) return;
+      payload = { payment_mode: mode };
+    } else if (isCollection) {
+      payload = {
+        activity_date: toISODate(colDate),
+        collection_method: method ?? undefined,
+        collection_ref_date: method === "bonifico" ? toISODate(bonDate) : undefined,
+      };
+    }
+    if (!payload) return;
     setBusy(true);
     try {
-      await apiPut(`/events/${event.id}`, { payment_mode: mode });
+      await apiPut(`/events/${event.id}`, payload);
       setEditOpen(false);
-      toast("Termini aggiornati", "success");
+      toast(isCollection ? "Incasso aggiornato" : "Termini aggiornati", "success");
       invalidate();
     } catch (e: any) {
       toast(e?.detail || "Operazione non riuscita", "error");
@@ -75,7 +111,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
       {canEdit ? (
         <Pressable
           testID={`event-edit-${event.id}`}
-          onPress={() => { setMode(event.payment_mode ?? null); setEditOpen(true); }}
+          onPress={openEdit}
           style={({ pressed }) => [styles.btn, pressed && { opacity: 0.8 }]}
           hitSlop={6}
         >
@@ -99,7 +135,9 @@ export function EventActions({ event }: { event: VisitEvent }) {
         <View style={styles.backdrop}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <AppText weight="bold" style={styles.sheetTitle}>Modifica termini di pagamento</AppText>
+              <AppText weight="bold" style={styles.sheetTitle}>
+                {isCollection ? "Modifica incasso" : "Modifica termini di pagamento"}
+              </AppText>
               <Pressable testID="ev-edit-close" onPress={() => setEditOpen(false)} hitSlop={8} style={styles.closeBtn}>
                 <X size={20} color={colors.onSurfaceSecondary} weight="bold" />
               </Pressable>
@@ -108,23 +146,48 @@ export function EventActions({ event }: { event: VisitEvent }) {
               <AppText style={styles.sheetSub}>{event.company_name}</AppText>
             ) : null}
             <ScrollView contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.sm }} showsVerticalScrollIndicator={false}>
-              <View style={styles.chips}>
-                {(pmQuery.data ?? []).map((pm) => {
-                  const on = mode === pm.key;
-                  return (
-                    <Pressable
-                      key={pm.key}
-                      testID={`ev-mode-${pm.key}`}
-                      onPress={() => setMode(pm.key)}
-                      style={[styles.chip, on && styles.chipOn]}
-                    >
-                      <AppText weight="semibold" style={[styles.chipText, on && { color: colors.onBrand }]}>{pm.label}</AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              {isOrder ? (
+                <View style={styles.chips}>
+                  {(pmQuery.data ?? []).map((pm) => {
+                    const on = mode === pm.key;
+                    return (
+                      <Pressable
+                        key={pm.key}
+                        testID={`ev-mode-${pm.key}`}
+                        onPress={() => setMode(pm.key)}
+                        style={[styles.chip, on && styles.chipOn]}
+                      >
+                        <AppText weight="semibold" style={[styles.chipText, on && { color: colors.onBrand }]}>{pm.label}</AppText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <>
+                  <ActivityDateField value={colDate} onChange={setColDate} label="Data dell'incasso" />
+                  <AppText weight="medium" style={styles.sheetSub}>Modalità di incasso</AppText>
+                  <View style={styles.chips}>
+                    {COLLECTION_METHODS.map((m) => {
+                      const on = method === m.key;
+                      return (
+                        <Pressable
+                          key={m.key}
+                          testID={`ev-method-${m.key}`}
+                          onPress={() => setMethod(m.key)}
+                          style={[styles.chip, on && styles.chipOn]}
+                        >
+                          <AppText weight="semibold" style={[styles.chipText, on && { color: colors.onBrand }]}>{m.label}</AppText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {method === "bonifico" ? (
+                    <ActivityDateField value={bonDate} onChange={setBonDate} label="Data del bonifico" />
+                  ) : null}
+                </>
+              )}
             </ScrollView>
-            <Button testID="ev-edit-save" title="Salva termini" onPress={saveEdit} loading={busy} />
+            <Button testID="ev-edit-save" title="Salva" onPress={saveEdit} loading={busy} />
           </View>
         </View>
       </Modal>

@@ -176,6 +176,8 @@ export type VisitEvent = {
   payment_mode?: string | null;
   payment_mode_label?: string | null;
   due_at?: string | null;
+  collection_method?: string | null;
+  collection_ref_date?: string | null;
 };
 
 export type Suspension = {

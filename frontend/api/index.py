@@ -1209,6 +1209,8 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
 class EventUpdate(BaseModel):
     payment_mode: Optional[str] = None
     activity_date: Optional[str] = None
+    collection_method: Optional[str] = None
+    collection_ref_date: Optional[str] = None
 
 
 async def _event_auth(event_id: str, user) -> dict:
@@ -1223,8 +1225,8 @@ async def _event_auth(event_id: str, user) -> dict:
 
 @api.put("/events/{event_id}")
 async def update_event(event_id: str, body: EventUpdate, user=Depends(get_current_user)):
-    """Modifica un evento già registrato. Per gli ordini consente di cambiare i
-    termini di pagamento (ricalcolando la scadenza) e/o la data dell'attività."""
+    """Modifica un evento già registrato. Per gli ordini: termini di pagamento
+    (ricalcola scadenza) e/o data. Per gli incassi: modalità e/o data."""
     ev = await _event_auth(event_id, user)
     update: dict = {}
     created = ev.get("created_at")
@@ -1232,6 +1234,9 @@ async def update_event(event_id: str, body: EventUpdate, user=Depends(get_curren
         created = created.replace(tzinfo=timezone.utc)
     if body.activity_date:
         created = parse_activity_date(body.activity_date, created or now_utc())
+        if ev["type"] == "collection":
+            # Come alla creazione: fine giornata (Roma) per saldare fino a quel giorno.
+            created = created.astimezone(ROME).replace(hour=23, minute=59, second=59, microsecond=0).astimezone(timezone.utc)
         update["created_at"] = created
     if ev["type"] == "order":
         pm = body.payment_mode if body.payment_mode is not None else ev.get("payment_mode")
@@ -1242,6 +1247,11 @@ async def update_event(event_id: str, body: EventUpdate, user=Depends(get_curren
         if ("payment_mode" in update) or ("created_at" in update):
             days = PAYMENT_MODES.get(pm, {}).get("days") if pm else None
             update["due_at"] = (created + timedelta(days=days)) if (days is not None and created) else None
+    if ev["type"] == "collection" and body.collection_method is not None:
+        if body.collection_method not in ("contanti", "bonifico", "assegno"):
+            raise HTTPException(status_code=400, detail="Modalità di incasso non valida")
+        update["collection_method"] = body.collection_method
+        update["collection_ref_date"] = body.collection_ref_date if body.collection_method == "bonifico" else None
     if not update:
         raise HTTPException(status_code=400, detail="Nessuna modifica")
     await db.events.update_one({"id": event_id}, {"$set": update})

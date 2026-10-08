@@ -132,3 +132,9 @@
 - Integrato in: app/client/[id].tsx (ogni riga Storico, escluso recurrence_order) e src/components/updates-panel.tsx ActivityRow (usato in Dashboard "Ultimi aggiornamenti" e in /storico). Backend /activities ora espone client_id e payment_mode.
 - Backend già testato: PUT ricalcola due_at (bonifico_30->agente_60 => +60gg); DELETE rimuove da storico/sospesi/banner; auth per agente. Vale per umberto e andrea.
 - needs_retesting: frontend flows.
+
+## Iter 33 (2026-10-08) — Fix modifica/elimina INCASSO + riapertura sospeso
+- Diagnosi: in anteprima DELETE/edit incasso funzionano (verificato: elimina incasso -> ordine riaperto come scaduto). Il "Not Found" visto dall'utente è il 404 generico di Starlette = backend Render NON ha ancora gli endpoint PUT/DELETE /api/events/{id} (deploy Render non aggiornato). Il nostro 404 direbbe "Evento non trovato".
+- Aggiunto valore: PUT /api/events/{id} ora supporta anche gli INCASSI (collection): collection_method (contanti/bonifico/assegno) + collection_ref_date + activity_date (created_at a fine giornata Roma per risaldare). EventActions mostra "Modifica" anche per gli incassi (modale con data + modalità + data bonifico). Eliminando un incasso il sospeso associato si riapre automaticamente (logica di saldo basata su created_at collection).
+- Backend verificato via requests: PUT collection contanti->bonifico+data OK; DELETE collection -> pending riaperto.
+- needs_retesting: frontend flows incasso (modifica/elimina) da Storico cliente e Ultimi aggiornamenti.
