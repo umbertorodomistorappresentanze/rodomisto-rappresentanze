@@ -1,5 +1,8 @@
 # AgendaVisite — PRD
 
+## Iter 34 (2026-10-08) — UX modalità di pagamento ordine (selezione + conferma) + modale più alta
+- Bottom sheet "Ordine effettuato": modalità pagamento ora CHIP compatte (order-pay-<key>) che SOLO evidenziano la selezione; pulsante verde pinnato "Conferma e Registra" (order-confirm, disabilitato finché non selezioni) registra l'ordine. Niente più invio accidentale durante lo scroll. snapPoints del BottomSheetModal portato a ["90%"] così tutto è visibile/scrollabile. Testing iter17: PASS per umberto e andrea.
+
 ## Iter 32 (2026-10-06) — Modifica/Elimina evento da Storico cliente e Ultimi aggiornamenti
 - Nuovo componente src/components/event-actions.tsx: "Modifica" (solo ordini, cambia termini e ricalcola scadenza via PUT /api/events/{id}) + "Elimina" (DELETE /api/events/{id} soft-delete) con modali interne. Invalida history/activities/suspensions/pending/clients.
 - Integrato in app/client/[id].tsx (ogni riga Storico, escluso recurrence_order) e in ActivityRow (Dashboard "Ultimi aggiornamenti" + /storico). Backend /activities espone client_id e payment_mode. Suspension item porta event_id/event_type/payment_mode per edit/delete anche dalla lista /sospesi.

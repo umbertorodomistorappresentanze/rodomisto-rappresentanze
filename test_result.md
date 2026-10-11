@@ -138,3 +138,8 @@
 - Aggiunto valore: PUT /api/events/{id} ora supporta anche gli INCASSI (collection): collection_method (contanti/bonifico/assegno) + collection_ref_date + activity_date (created_at a fine giornata Roma per risaldare). EventActions mostra "Modifica" anche per gli incassi (modale con data + modalità + data bonifico). Eliminando un incasso il sospeso associato si riapre automaticamente (logica di saldo basata su created_at collection).
 - Backend verificato via requests: PUT collection contanti->bonifico+data OK; DELETE collection -> pending riaperto.
 - needs_retesting: frontend flows incasso (modifica/elimina) da Storico cliente e Ultimi aggiornamenti.
+
+## Iter 34 (2026-10-08) — UX modalità di pagamento ordine (selezione + conferma)
+- Problema: nel bottom sheet "Ordine effettuato", toccare una modalità di pagamento registrava SUBITO l'ordine; scorrendo si selezionava per errore; modale tagliata.
+- Fix (src/components/quick-actions-sheet.tsx): le modalità ora sono CHIP compatte a griglia (testID order-pay-<key>) che SOLO evidenziano la selezione (stato orderPaymentMode), senza inviare. In fondo, pinnato fuori dallo scroll, un pulsante verde "Conferma e Registra" (testID order-confirm) disabilitato finché non si seleziona una modalità; premendolo registra l'ordine. Contenitore flex:1 con BottomSheetScrollView scrollabile + footerBar fissa.
+- needs_retesting: flusso registrazione ordine (selezione modalità NON invia; conferma invia) per umberto e andrea.

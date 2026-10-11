@@ -6,7 +6,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ArrowBendUpLeft,
   CaretLeft,
-  CreditCard,
   CurrencyEur,
   NotePencil,
   Storefront,
@@ -52,6 +51,7 @@ export const QuickActionsSheet = forwardRef<
   const [busy, setBusy] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [orderCompany, setOrderCompany] = useState<Company | null>(null);
+  const [orderPaymentMode, setOrderPaymentMode] = useState<string | null>(null);
   const [activityDate, setActivityDate] = useState<Date>(new Date());
 
   const pendingQuery = useQuery({
@@ -67,13 +67,14 @@ export const QuickActionsSheet = forwardRef<
       setMode("main");
       setNote("");
       setOrderCompany(null);
+      setOrderPaymentMode(null);
       setActivityDate(new Date());
       modalRef.current?.present();
     },
     dismiss: () => modalRef.current?.dismiss(),
   }));
 
-  const snapPoints = useMemo(() => ["55%", "88%"], []);
+  const snapPoints = useMemo(() => ["90%"], []);
 
   async function submit(payload: any, successMsg: string) {
     if (!client || busy) return;
@@ -234,48 +235,69 @@ export const QuickActionsSheet = forwardRef<
         ) : null}
 
         {mode === "order" ? (
-          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
-            {!orderCompany ? (
-              <>
-                <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
-                {companies.map((co) => (
-                  <Pressable
-                    key={co.id}
-                    testID={`order-company-${co.id}`}
-                    onPress={() => setOrderCompany(co)}
-                    style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
-                  >
-                    <Storefront size={20} color={colors.brand} weight="bold" />
-                    <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
+          <View style={{ flex: 1 }}>
+            <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.lg, gap: spacing.sm }} showsVerticalScrollIndicator>
+              {!orderCompany ? (
+                <>
+                  <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
+                  {companies.map((co) => (
+                    <Pressable
+                      key={co.id}
+                      testID={`order-company-${co.id}`}
+                      onPress={() => { setOrderCompany(co); setOrderPaymentMode(null); }}
+                      style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
+                    >
+                      <Storefront size={20} color={colors.brand} weight="bold" />
+                      <AppText weight="semibold" style={styles.rowItemText}>{co.name}</AppText>
+                    </Pressable>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Pressable testID="order-back" onPress={() => { setOrderCompany(null); setOrderPaymentMode(null); }} style={styles.backLink}>
+                    <CaretLeft size={16} color={colors.brand} weight="bold" />
+                    <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
                   </Pressable>
-                ))}
-              </>
-            ) : (
-              <>
-                <Pressable testID="order-back" onPress={() => setOrderCompany(null)} style={styles.backLink}>
-                  <CaretLeft size={16} color={colors.brand} weight="bold" />
-                  <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
-                </Pressable>
-                <ActivityDateField value={activityDate} onChange={setActivityDate} />
-                <AppText style={styles.hint}>Modalità di pagamento (solo per questo ordine)</AppText>
-                {paymentModes.map((pm) => (
-                  <Pressable
-                    key={pm.key}
-                    testID={`order-pay-${pm.key}`}
-                    disabled={busy}
-                    onPress={() => submit(
-                      { type: "order", company_id: orderCompany.id, payment_mode: pm.key },
+                  <ActivityDateField value={activityDate} onChange={setActivityDate} />
+                  <AppText style={styles.hint}>Modalità di pagamento (tocca per selezionare)</AppText>
+                  <View style={styles.payGrid}>
+                    {paymentModes.map((pm) => {
+                      const on = orderPaymentMode === pm.key;
+                      return (
+                        <Pressable
+                          key={pm.key}
+                          testID={`order-pay-${pm.key}`}
+                          onPress={() => setOrderPaymentMode(pm.key)}
+                          style={[styles.payChip, on && styles.payChipOn]}
+                        >
+                          <AppText weight="semibold" style={[styles.payChipText, on && { color: colors.onBrand }]}>
+                            {pm.label}
+                          </AppText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+            </BottomSheetScrollView>
+            {orderCompany ? (
+              <View style={styles.footerBar}>
+                <Button
+                  testID="order-confirm"
+                  title="Conferma e Registra"
+                  loading={busy}
+                  disabled={!orderPaymentMode}
+                  onPress={() => {
+                    if (!orderPaymentMode) return;
+                    submit(
+                      { type: "order", company_id: orderCompany.id, payment_mode: orderPaymentMode },
                       `Ordine ${orderCompany.name} registrato`
-                    )}
-                    style={({ pressed }) => [styles.rowItem, pressed && { opacity: 0.7 }]}
-                  >
-                    <CreditCard size={20} color={colors.brand} weight="bold" />
-                    <AppText weight="semibold" style={styles.rowItemText}>{pm.label}</AppText>
-                  </Pressable>
-                ))}
-              </>
-            )}
-          </BottomSheetScrollView>
+                    );
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         {mode === "collection" ? (
@@ -407,6 +429,25 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       justifyContent: "center",
     },
     grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+    payGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+    payChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.border,
+      minHeight: 44,
+      justifyContent: "center",
+    },
+    payChipOn: { backgroundColor: c.brand, borderColor: c.brand },
+    payChipText: { fontSize: 14, color: c.onSurface },
+    footerBar: {
+      paddingTop: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      backgroundColor: c.surface,
+    },
     banner: {
       flexDirection: "row",
       gap: spacing.sm,
