@@ -1,5 +1,8 @@
 # AgendaVisite — PRD
 
+## Iter 35 (2026-10-08) — Modalità pagamento: menu a tendina + footer fisso (fix layout mobile)
+- Bottom sheet "Ordine effettuato": modalità pagamento ora MENU A TENDINA (order-pay-select apre/chiude lista order-pay-<key>); la selezione evidenzia e chiude il menu senza inviare. Footer FISSO fuori dallo scroll con "Conferma e Registra" (order-confirm), paddingBottom = safe-area insets, sempre visibile senza scroll. Testing iter18: PASS mobile 390x844 per umberto e andrea (footer visibile y=454).
+
 ## Iter 34 (2026-10-08) — UX modalità di pagamento ordine (selezione + conferma) + modale più alta
 - Bottom sheet "Ordine effettuato": modalità pagamento ora CHIP compatte (order-pay-<key>) che SOLO evidenziano la selezione; pulsante verde pinnato "Conferma e Registra" (order-confirm, disabilitato finché non selezioni) registra l'ordine. Niente più invio accidentale durante lo scroll. snapPoints del BottomSheetModal portato a ["90%"] così tutto è visibile/scrollabile. Testing iter17: PASS per umberto e andrea.
 

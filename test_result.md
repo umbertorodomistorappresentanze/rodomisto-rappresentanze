@@ -143,3 +143,8 @@
 - Problema: nel bottom sheet "Ordine effettuato", toccare una modalità di pagamento registrava SUBITO l'ordine; scorrendo si selezionava per errore; modale tagliata.
 - Fix (src/components/quick-actions-sheet.tsx): le modalità ora sono CHIP compatte a griglia (testID order-pay-<key>) che SOLO evidenziano la selezione (stato orderPaymentMode), senza inviare. In fondo, pinnato fuori dallo scroll, un pulsante verde "Conferma e Registra" (testID order-confirm) disabilitato finché non si seleziona una modalità; premendolo registra l'ordine. Contenitore flex:1 con BottomSheetScrollView scrollabile + footerBar fissa.
 - needs_retesting: flusso registrazione ordine (selezione modalità NON invia; conferma invia) per umberto e andrea.
+
+## Iter 35 (2026-10-08) — Modalità pagamento come menu a tendina + footer fisso (fix mobile)
+- Problema mobile: le chip occupavano troppa altezza e il pulsante conferma restava nascosto sotto le barre del browser.
+- Fix (src/components/quick-actions-sheet.tsx): modalità pagamento ora MENU A TENDINA: Pressable "Seleziona modalità…" (testID order-pay-select) che apre/chiude la lista opzioni (testID order-pay-<key>); selezionando un'opzione si chiude il menu e si evidenzia la scelta. Footer FISSO fuori dallo scroll con "Conferma e Registra" (testID order-confirm), paddingBottom = safe-area insets + spacing, sempre visibile. Corpo scrollabile (BottomSheetScrollView). Niente invio al tocco; solo order-confirm registra.
+- needs_retesting: flusso ordine su mobile (dropdown + footer visibile + conferma) per umberto e andrea.

@@ -1,11 +1,14 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetView } from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ArrowBendUpLeft,
+  CaretDown,
   CaretLeft,
+  CaretUp,
   CurrencyEur,
   NotePencil,
   Storefront,
@@ -52,7 +55,9 @@ export const QuickActionsSheet = forwardRef<
   const [showPicker, setShowPicker] = useState(false);
   const [orderCompany, setOrderCompany] = useState<Company | null>(null);
   const [orderPaymentMode, setOrderPaymentMode] = useState<string | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
   const [activityDate, setActivityDate] = useState<Date>(new Date());
+  const insets = useSafeAreaInsets();
 
   const pendingQuery = useQuery({
     queryKey: ["pending-suspensions", client?.id],
@@ -68,6 +73,7 @@ export const QuickActionsSheet = forwardRef<
       setNote("");
       setOrderCompany(null);
       setOrderPaymentMode(null);
+      setPayOpen(false);
       setActivityDate(new Date());
       modalRef.current?.present();
     },
@@ -254,34 +260,50 @@ export const QuickActionsSheet = forwardRef<
                 </>
               ) : (
                 <>
-                  <Pressable testID="order-back" onPress={() => { setOrderCompany(null); setOrderPaymentMode(null); }} style={styles.backLink}>
+                  <Pressable testID="order-back" onPress={() => { setOrderCompany(null); setOrderPaymentMode(null); setPayOpen(false); }} style={styles.backLink}>
                     <CaretLeft size={16} color={colors.brand} weight="bold" />
                     <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
                   </Pressable>
                   <ActivityDateField value={activityDate} onChange={setActivityDate} />
-                  <AppText style={styles.hint}>Modalità di pagamento (tocca per selezionare)</AppText>
-                  <View style={styles.payGrid}>
-                    {paymentModes.map((pm) => {
-                      const on = orderPaymentMode === pm.key;
-                      return (
-                        <Pressable
-                          key={pm.key}
-                          testID={`order-pay-${pm.key}`}
-                          onPress={() => setOrderPaymentMode(pm.key)}
-                          style={[styles.payChip, on && styles.payChipOn]}
-                        >
-                          <AppText weight="semibold" style={[styles.payChipText, on && { color: colors.onBrand }]}>
-                            {pm.label}
-                          </AppText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <AppText style={styles.hint}>Modalità di pagamento</AppText>
+                  <Pressable
+                    testID="order-pay-select"
+                    onPress={() => setPayOpen((o) => !o)}
+                    style={styles.select}
+                  >
+                    <AppText weight="semibold" style={[styles.selectText, !orderPaymentMode && { color: colors.muted }]}>
+                      {orderPaymentMode
+                        ? (paymentModes.find((p) => p.key === orderPaymentMode)?.label ?? "Seleziona modalità…")
+                        : "Seleziona modalità…"}
+                    </AppText>
+                    {payOpen
+                      ? <CaretUp size={18} color={colors.onSurfaceSecondary} weight="bold" />
+                      : <CaretDown size={18} color={colors.onSurfaceSecondary} weight="bold" />}
+                  </Pressable>
+                  {payOpen ? (
+                    <View style={styles.dropdown}>
+                      {paymentModes.map((pm) => {
+                        const on = orderPaymentMode === pm.key;
+                        return (
+                          <Pressable
+                            key={pm.key}
+                            testID={`order-pay-${pm.key}`}
+                            onPress={() => { setOrderPaymentMode(pm.key); setPayOpen(false); }}
+                            style={[styles.option, on && styles.optionOn]}
+                          >
+                            <AppText weight={on ? "bold" : "medium"} style={[styles.optionText, on && { color: colors.brand }]}>
+                              {pm.label}
+                            </AppText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
                 </>
               )}
             </BottomSheetScrollView>
             {orderCompany ? (
-              <View style={styles.footerBar}>
+              <View style={[styles.footerBar, { paddingBottom: insets.bottom + spacing.md }]}>
                 <Button
                   testID="order-confirm"
                   title="Conferma e Registra"
@@ -429,19 +451,35 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       justifyContent: "center",
     },
     grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-    payGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    payChip: {
+    select: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.sm,
+      minHeight: 50,
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.pill,
+      borderRadius: radius.md,
       backgroundColor: c.surfaceSecondary,
       borderWidth: 1,
       borderColor: c.border,
-      minHeight: 44,
-      justifyContent: "center",
     },
-    payChipOn: { backgroundColor: c.brand, borderColor: c.brand },
-    payChipText: { fontSize: 14, color: c.onSurface },
+    selectText: { fontSize: 15, color: c.onSurface, flex: 1 },
+    dropdown: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      overflow: "hidden",
+    },
+    option: {
+      minHeight: 46,
+      justifyContent: "center",
+      paddingHorizontal: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.divider,
+    },
+    optionOn: { backgroundColor: c.surfaceSecondary },
+    optionText: { fontSize: 15, color: c.onSurface },
     footerBar: {
       paddingTop: spacing.sm,
       borderTopWidth: 1,
