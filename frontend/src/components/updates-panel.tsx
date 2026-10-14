@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { CaretRight, ClockCounterClockwise } from "phosphor-react-native";
+import { CaretDown, CaretRight, CaretUp, ClockCounterClockwise } from "phosphor-react-native";
 
 import { Activity, apiGet, VisitEvent } from "@/src/api";
 import { useAuth } from "@/src/auth";
@@ -67,6 +67,7 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();
   const { user } = useAuth();
   const [scope, setScope] = useState<Scope>("all");
+  const [open, setOpen] = useState(false);
   const [lastAccess, setLastAccess] = useState<string | null>(null);
 
   // Ultimo accesso dell'utente (salvato localmente sul dispositivo): mostra
@@ -115,57 +116,63 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
         </AppText>
       </View>
 
-      {/* ULTIMI AGGIORNAMENTI */}
+      {/* ULTIMI AGGIORNAMENTI (tendina comprimibile) */}
       <View style={styles.updatesCard}>
-        <View style={styles.updatesHead}>
-          <Pressable
-            testID="updates-expand"
-            onPress={() => router.push("/storico")}
-            hitSlop={8}
-            style={styles.updatesTitleRow}
-          >
+        <Pressable
+          testID="updates-toggle"
+          onPress={() => setOpen((v) => !v)}
+          style={styles.updatesHead}
+        >
+          <View style={styles.updatesTitleRow}>
             <ClockCounterClockwise size={18} color={colors.brand} weight="bold" />
-            <AppText weight="bold" style={styles.updatesTitle}>ULTIMI AGGIORNAMENTI</AppText>
-          </Pressable>
-          <Pressable testID="see-all-activities" onPress={() => router.push("/storico")} hitSlop={8} style={styles.seeAll}>
-            <AppText weight="semibold" style={styles.seeAllText}>Vedi tutti</AppText>
-            <CaretRight size={14} color={colors.brand} weight="bold" />
-          </Pressable>
-        </View>
-
-        {isAdmin ? (
-          <View style={styles.filterRow}>
-            {(["all", "umberto", "andrea"] as Scope[]).map((s) => {
-              const on = scope === s;
-              const label = s === "all" ? "Tutti" : s === "umberto" ? "Umberto" : "Andrea";
-              return (
-                <Pressable
-                  key={s}
-                  testID={`upd-filter-${s}`}
-                  onPress={() => setScope(s)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <AppText weight="semibold" style={[styles.chipText, on && styles.chipTextOn]}>{label}</AppText>
-                </Pressable>
-              );
-            })}
+            <AppText weight="bold" style={styles.updatesTitle}>
+              {open ? "ULTIMI AGGIORNAMENTI" : "Mostra ultimi aggiornamenti"}
+            </AppText>
           </View>
-        ) : null}
-
-        {list.length === 0 ? (
-          <AppText style={styles.emptyText}>Nessun aggiornamento recente.</AppText>
-        ) : (
-          <View style={{ gap: spacing.xs }}>
-            {list.map((a) => (
-              <ActivityRow key={a.id} item={a} showAgent={isAdmin && scope === "all"} />
-            ))}
-          </View>
-        )}
-
-        <Pressable testID="updates-open-history" onPress={() => router.push("/storico")} style={styles.expandBtn}>
-          <AppText weight="semibold" style={styles.expandText}>Apri storico completo</AppText>
-          <CaretRight size={14} color={colors.brand} weight="bold" />
+          {open ? (
+            <CaretUp size={18} color={colors.brand} weight="bold" />
+          ) : (
+            <CaretDown size={18} color={colors.brand} weight="bold" />
+          )}
         </Pressable>
+
+        {open ? (
+          <>
+            {isAdmin ? (
+              <View style={styles.filterRow}>
+                {(["all", "umberto", "andrea"] as Scope[]).map((s) => {
+                  const on = scope === s;
+                  const label = s === "all" ? "Tutti" : s === "umberto" ? "Umberto" : "Andrea";
+                  return (
+                    <Pressable
+                      key={s}
+                      testID={`upd-filter-${s}`}
+                      onPress={() => setScope(s)}
+                      style={[styles.chip, on && styles.chipOn]}
+                    >
+                      <AppText weight="semibold" style={[styles.chipText, on && styles.chipTextOn]}>{label}</AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {list.length === 0 ? (
+              <AppText style={styles.emptyText}>Nessun aggiornamento recente.</AppText>
+            ) : (
+              <View style={{ gap: spacing.xs }}>
+                {list.map((a) => (
+                  <ActivityRow key={a.id} item={a} showAgent={isAdmin && scope === "all"} />
+                ))}
+              </View>
+            )}
+
+            <Pressable testID="updates-open-history" onPress={() => router.push("/storico")} style={styles.expandBtn}>
+              <AppText weight="semibold" style={styles.expandText}>Apri storico completo</AppText>
+              <CaretRight size={14} color={colors.brand} weight="bold" />
+            </Pressable>
+          </>
+        ) : null}
       </View>
     </View>
   );

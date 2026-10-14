@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, SectionList, TextInput, View } from "react-n
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { CaretRight, ChartBar, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, WarningCircle, X } from "phosphor-react-native";
+import { CaretRight, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, WarningCircle, X } from "phosphor-react-native";
 
 import { apiGet, Client, Company, Giro, PaymentMode, Suspension } from "@/src/api";
 import { useAuth } from "@/src/auth";
@@ -122,12 +122,19 @@ export default function Dashboard() {
             <AppText weight="semibold" style={styles.quickTitle}>Anagrafica</AppText>
             <AppText style={styles.quickSub}>Clienti</AppText>
           </Pressable>
-          <Pressable testID="statistiche-card" onPress={() => router.push("/statistiche")} style={styles.quickCard}>
-            <View style={styles.quickIcon}>
-              <ChartBar size={22} color={colors.brand} weight="fill" />
+          <Pressable testID="sospesi-card" onPress={() => router.push("/sospesi")} style={styles.quickCard}>
+            <View style={styles.quickIconAlert}>
+              <WarningCircle size={22} color={colors.error} weight="fill" />
             </View>
-            <AppText weight="semibold" style={styles.quickTitle}>Statistiche</AppText>
-            <AppText style={styles.quickSub}>Esportazione</AppText>
+            <AppText weight="semibold" style={styles.quickTitle}>Promemoria Sospesi</AppText>
+            <AppText style={[styles.quickSub, (susOverdue + susSoon) > 0 && { color: colors.error }]}>
+              {(susOverdue + susSoon) === 0
+                ? "Nessuno in scadenza"
+                : [
+                    susOverdue > 0 ? `${susOverdue} da incassare` : null,
+                    susSoon > 0 ? `${susSoon} in scadenza` : null,
+                  ].filter(Boolean).join(" · ")}
+            </AppText>
           </Pressable>
         </View>
 
@@ -189,22 +196,6 @@ export default function Dashboard() {
         }
         ListHeaderComponent={
           <>
-            {!searching && (susOverdue + susSoon) > 0 ? (
-              <Pressable testID="sospesi-alert" onPress={() => router.push("/sospesi")} style={styles.sosCard}>
-                <View style={styles.sosIcon}>
-                  <WarningCircle size={22} color={colors.error} weight="fill" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <AppText weight="bold" style={styles.sosTitle}>Promemoria sospesi</AppText>
-                  <AppText style={styles.sosSub}>
-                    {susOverdue > 0 ? `${susOverdue} da incassare` : ""}
-                    {susOverdue > 0 && susSoon > 0 ? " · " : ""}
-                    {susSoon > 0 ? `${susSoon} in scadenza` : ""}
-                  </AppText>
-                </View>
-                <CaretRight size={20} color={colors.error} weight="bold" />
-              </Pressable>
-            ) : null}
             {!searching ? <UpdatesPanel isAdmin={isAdmin} /> : null}
             {activeGiroId && !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
               <View style={styles.summaryCard}>
@@ -305,6 +296,10 @@ const useStyles = makeStyles((c) => ({
     width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.brandSecondary,
     alignItems: "center", justifyContent: "center", marginBottom: spacing.xs,
   },
+  quickIconAlert: {
+    width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.surfaceTertiary,
+    alignItems: "center", justifyContent: "center", marginBottom: spacing.xs,
+  },
   quickTitle: { fontSize: 15, color: c.onSurface },
   quickSub: { fontSize: 12, color: c.muted },
   blockLabel: { fontSize: 12, color: c.onSurfaceTertiary, letterSpacing: 0.5, marginTop: spacing.xs },
@@ -385,13 +380,4 @@ const useStyles = makeStyles((c) => ({
   summaryNumber: { fontSize: 26, color: c.brand },
   summaryLabel: { fontSize: 12, color: c.muted },
   summaryDivider: { width: 1, alignSelf: "stretch", backgroundColor: c.border, marginVertical: spacing.xs },
-  sosCard: {
-    flexDirection: "row", alignItems: "center", gap: spacing.md,
-    backgroundColor: c.surface,
-    borderWidth: 1, borderColor: c.error,
-    borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, minHeight: 60,
-  },
-  sosIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  sosTitle: { fontSize: 15, color: c.onSurface },
-  sosSub: { fontSize: 12, color: c.error, marginTop: 1 },
 }));
