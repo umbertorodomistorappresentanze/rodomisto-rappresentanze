@@ -12,12 +12,13 @@ import {
   CurrencyEur,
   NotePencil,
   Storefront,
+  Trash,
   Warning,
   WarningCircle,
   X,
 } from "phosphor-react-native";
 
-import { apiGet, apiPost, Client, Company, PaymentMode, PendingSuspension } from "@/src/api";
+import { apiDelete, apiGet, apiPost, Client, Company, PaymentMode, PendingSuspension } from "@/src/api";
 import { AppText, Button } from "@/src/components/ui";
 import { ActivityDateField, toISODate } from "@/src/components/activity-date-field";
 import { dmyDate } from "@/src/format";
@@ -28,7 +29,7 @@ export type QuickActionsRef = {
   dismiss: () => void;
 };
 
-type Mode = "main" | "order" | "reschedule" | "note" | "collection" | "suspension";
+type Mode = "main" | "order" | "reschedule" | "note" | "collection" | "suspension" | "delete";
 
 const RESCHEDULE_OPTIONS = [
   { label: "Tra 3 giorni", days: 3 },
@@ -91,6 +92,20 @@ export const QuickActionsSheet = forwardRef<
       onSuccess(successMsg);
     } catch (e: any) {
       onError(e?.detail || "Operazione non riuscita");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteClient() {
+    if (!client || busy) return;
+    setBusy(true);
+    try {
+      await apiDelete(`/clients/${client.id}`);
+      modalRef.current?.dismiss();
+      onSuccess("Cliente eliminato");
+    } catch (e: any) {
+      onError(e?.detail || "Eliminazione non riuscita");
     } finally {
       setBusy(false);
     }
@@ -174,6 +189,8 @@ export const QuickActionsSheet = forwardRef<
               ? "Sospeso · scegli azienda"
               : mode === "reschedule"
               ? "Visita rimandata"
+              : mode === "delete"
+              ? "Elimina cliente"
               : "Nota della visita"
           }
         />
@@ -237,6 +254,41 @@ export const QuickActionsSheet = forwardRef<
               bg={colors.surfaceTertiary}
               onPress={() => setMode("note")}
             />
+          </View>
+        ) : null}
+
+        {mode === "main" ? (
+          <Pressable
+            testID="action-elimina"
+            onPress={() => setMode("delete")}
+            style={({ pressed }) => [styles.deleteLink, pressed && { opacity: 0.7 }]}
+          >
+            <Trash size={18} color={colors.error} weight="bold" />
+            <AppText weight="semibold" style={styles.deleteLinkText}>Elimina cliente</AppText>
+          </Pressable>
+        ) : null}
+
+        {mode === "delete" ? (
+          <View style={{ gap: spacing.md }}>
+            <View style={styles.delIconWrap}>
+              <Trash size={30} color={colors.error} weight="fill" />
+            </View>
+            <AppText style={styles.delText}>
+              Sei sicuro di voler eliminare definitivamente{" "}
+              <AppText weight="bold" style={styles.delText}>{client?.ragione_sociale}</AppText>
+              {" "}dall&apos;anagrafica e da tutti i giri?
+            </AppText>
+            <Pressable
+              testID="delete-client-confirm"
+              disabled={busy}
+              onPress={deleteClient}
+              style={({ pressed }) => [styles.delConfirmBtn, pressed && { opacity: 0.85 }]}
+            >
+              <AppText weight="bold" style={styles.delConfirmText}>
+                {busy ? "Eliminazione…" : "Elimina definitivamente"}
+              </AppText>
+            </Pressable>
+            <Button title="Annulla" variant="ghost" testID="delete-client-cancel" onPress={() => setMode("main")} />
           </View>
         ) : null}
 
@@ -534,8 +586,31 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       alignItems: "center",
     },
     bigChipText: { fontSize: 15, color: c.onBrandSecondary },
-    noteInput: {
-      minHeight: 120,
+    deleteLink: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+      paddingVertical: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.error,
+      backgroundColor: c.surfaceTertiary,
+    },
+    deleteLinkText: { fontSize: 15, color: c.error },
+    delIconWrap: {
+      width: 60, height: 60, borderRadius: radius.pill,
+      backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center",
+      alignSelf: "center", marginTop: spacing.sm,
+    },
+    delText: { fontSize: 15, color: c.onSurface, textAlign: "center", lineHeight: 22 },
+    delConfirmBtn: {
+      minHeight: 50, borderRadius: radius.md, backgroundColor: c.error,
+      alignItems: "center", justifyContent: "center", marginTop: spacing.xs,
+    },
+    delConfirmText: { fontSize: 16, color: c.onBrand },
+    noteInput: {      minHeight: 120,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: radius.md,

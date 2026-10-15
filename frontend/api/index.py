@@ -1034,12 +1034,16 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
 
 
 @api.delete("/clients/{client_id}")
-async def delete_client(client_id: str, user=Depends(require_admin)):
-    res = await db.clients.update_one(
-        {"id": client_id, "deleted_at": None}, {"$set": {"deleted_at": now_utc()}}
-    )
-    if res.matched_count == 0:
+async def delete_client(client_id: str, user=Depends(get_current_user)):
+    target = await db.clients.find_one({"id": client_id, "deleted_at": None})
+    if not target:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
+    # L'admin può eliminare qualsiasi cliente; l'agente solo i propri.
+    if user.get("role") != "admin" and target.get("agent") != user["username"]:
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+    await db.clients.update_one(
+        {"id": client_id}, {"$set": {"deleted_at": now_utc()}}
+    )
     return {"ok": True}
 
 

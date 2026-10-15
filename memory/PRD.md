@@ -239,6 +239,15 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Invariati: giri territoriali, ordine clienti, assegnazione Umberto/Andrea, ricorrenze, dati esistenti. Permessi rispettati (andrea solo propri clienti).
 - Verificato: 14/14 test dedicati + 75/76 suite (test obsoleto aggiornato) → tutto verde; UI verificata (🔴 compare/scompare, ordine a 2 passi).
 
+## Implemented (2026-10-15) — Home layout v2 + eliminazione clienti
+- **Dashboard riquadri in alto**: "Statistiche" sostituito da **Promemoria Sospesi** (icona avviso + contatore "N da incassare · N in scadenza", tap → /sospesi). Statistiche/Esportazione resta in tab **Altro**. Rimosso il banner rosso centrale duplicato.
+- **"Ultimi aggiornamenti" a tendina** (Collapsible) in `updates-panel.tsx`, **chiusa di default** ("Mostra ultimi aggiornamenti ▾"); il box verde "Ultimo Aggiornamento" resta sempre visibile.
+- **Giro Visite Clienti vuoto all'avvio**: `selected-giro.tsx` non ripristina più il giro da storage; selezione solo in memoria per la sessione, riparte vuota ad ogni apertura. La lista clienti compare solo dopo la scelta di un giro.
+- **Eliminazione clienti per Andrea**: backend `DELETE /api/clients/{id}` ora consente ad admin (qualsiasi cliente) e all'agente (solo i propri, altrimenti 403). Pulsante "Elimina cliente" in scheda cliente visibile anche al proprietario.
+- **Eliminazione rapida dal menu ⋮**: in `quick-actions-sheet.tsx` aggiunta voce "Elimina cliente" con schermata di conferma ("Sei sicuro di voler eliminare definitivamente [Nome] dall'anagrafica e da tutti i giri?").
+- Verificato: curl backend (andrea elimina propri 200, altrui 403, umberto 200); flussi frontend via screenshot per entrambi gli account.
+
+
 ## Implemented (2026-09-19) — iterazione 6 (RICORRENZE + WEB)
 - **Versione WEB**: la stessa app Expo è accessibile da browser desktop (React Native Web) sullo stesso backend/DB → dati sincronizzati in tempo reale tra telefono e web. Nessun DB separato.
 - **Nuova sezione RICORRENZE** (tab dedicata, sia admin sia agente), completamente separata dai giri territoriali:

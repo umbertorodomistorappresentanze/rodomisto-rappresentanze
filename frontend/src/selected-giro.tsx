@@ -1,8 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
-
-import { storage } from "@/src/utils/storage";
-
-const KEY = "agendavisite_selected_giro";
+import { createContext, useContext, useState } from "react";
 
 type Ctx = {
   giroId: string | null;
@@ -13,25 +9,12 @@ type Ctx = {
 const SelectedGiroContext = createContext<Ctx>({ giroId: null, setGiroId: () => {}, ready: false });
 
 export function SelectedGiroProvider({ children }: { children: React.ReactNode }) {
-  const [giroId, setGiroIdState] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const saved = await storage.getItem<string | null>(KEY, null);
-      if (saved) setGiroIdState(saved as string);
-      setReady(true);
-    })();
-  }, []);
-
-  const setGiroId = (id: string | null) => {
-    setGiroIdState(id);
-    if (id) storage.setItem(KEY, id);
-    else storage.removeItem(KEY);
-  };
+  // Nessun giro preselezionato all'apertura dell'app: la selezione vive solo
+  // in memoria durante la sessione corrente e riparte vuota ad ogni avvio.
+  const [giroId, setGiroId] = useState<string | null>(null);
 
   return (
-    <SelectedGiroContext.Provider value={{ giroId, setGiroId, ready }}>
+    <SelectedGiroContext.Provider value={{ giroId, setGiroId, ready: true }}>
       {children}
     </SelectedGiroContext.Provider>
   );

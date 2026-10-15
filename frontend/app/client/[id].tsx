@@ -270,7 +270,7 @@ export default function ClientDetail() {
             icon={<PencilSimple size={18} color={colors.onBrand} weight="bold" />}
             onPress={() => router.push(`/client/edit/${client.id}`)}
           />
-          {isAdmin ? (
+          {isAdmin || client.agent === user?.username ? (
             <Pressable testID="delete-client-btn" onPress={() => setShowDelete(true)} style={styles.deleteBtn}>
               <Trash size={18} color={colors.error} weight="bold" />
               <AppText weight="semibold" style={styles.deleteText}>Elimina cliente</AppText>
