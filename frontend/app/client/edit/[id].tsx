@@ -6,10 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Check, MapTrifold, X } from "phosphor-react-native";
 
-import { apiGet, apiPut, Client, Giro } from "@/src/api";
+import { apiGet, apiPut, Client, Giro, Site } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { SitesEditor } from "@/src/components/sites-editor";
 import { normalizeProvincia } from "@/src/utils/provincia";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -28,9 +29,10 @@ export default function EditClient() {
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
 
   const [form, setForm] = useState({
-    ragione_sociale: "", partita_iva: "", provincia: "", citta: "", zona: "",
+    ragione_sociale: "", partita_iva: "", sede_nome: "", provincia: "", citta: "", zona: "",
     indirizzo: "", cap: "", telefono: "", email: "", position: "",
   });
+  const [sites, setSites] = useState<Site[]>([]);
   const [giroId, setGiroId] = useState<string | null>(null);
   const [showGiro, setShowGiro] = useState(false);
   const [agent, setAgent] = useState<"umberto" | "andrea">("umberto");
@@ -41,6 +43,7 @@ export default function EditClient() {
     setForm({
       ragione_sociale: c.ragione_sociale ?? "",
       partita_iva: c.partita_iva ?? (c.extra?.partita_iva ?? ""),
+      sede_nome: c.sede_nome ?? (c.extra?.sede_nome ?? ""),
       provincia: c.provincia ?? "",
       citta: c.citta ?? "",
       zona: c.zona ?? "",
@@ -50,6 +53,7 @@ export default function EditClient() {
       email: c.email ?? "",
       position: c.position != null && c.position !== 999 ? String(c.position) : "",
     });
+    setSites(c.sites ?? (c.extra?.sites ?? []));
     setGiroId(c.giro_id ?? null);
     setAgent((c.agent as "umberto" | "andrea") ?? "umberto");
   }, [clientQuery.data?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -61,6 +65,7 @@ export default function EditClient() {
       apiPut<Client>(`/clients/${id}`, {
         ragione_sociale: form.ragione_sociale.trim(),
         partita_iva: form.partita_iva.trim(),
+        sede_nome: form.sede_nome.trim(),
         provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
@@ -70,6 +75,7 @@ export default function EditClient() {
         email: form.email.trim(),
         giro_id: giroId,
         position: form.position ? parseInt(form.position, 10) : 999,
+        sites,
         ...(isAdmin ? { agent } : {}),
       }),
     onSuccess: () => {
@@ -143,6 +149,7 @@ export default function EditClient() {
         </View>
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="e-position" />
+        <LabeledInput label="Nominativo sede principale (opzionale)" value={form.sede_nome} onChange={set("sede_nome")} testID="e-sede-nome" />
         <View>
           <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
           <TextInput
@@ -164,6 +171,9 @@ export default function EditClient() {
         <LabeledInput label="CAP" value={form.cap} onChange={set("cap")} keyboardType="number-pad" testID="e-cap" />
         <LabeledInput label="Telefono" value={form.telefono} onChange={set("telefono")} keyboardType="phone-pad" testID="e-telefono" />
         <LabeledInput label="Email" value={form.email} onChange={set("email")} keyboardType="email-address" testID="e-email" />
+
+        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.sm }} />
+        <SitesEditor value={sites} onChange={setSites} giri={giriQuery.data ?? []} />
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>

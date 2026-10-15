@@ -274,6 +274,20 @@ class GiroUpdate(BaseModel):
     active: Optional[bool] = None
 
 
+class Site(BaseModel):
+    """Sede di scarico aggiuntiva del cliente. Ogni sede può avere un proprio
+    Giro territoriale e una propria Posizione nel giro (ordine di marcia)."""
+    id: Optional[str] = None
+    nominativo: str = ""
+    indirizzo: str = ""
+    cap: str = ""
+    citta: str = ""
+    provincia: str = ""
+    zona: str = ""
+    giro_id: Optional[str] = None
+    position: Optional[int] = None
+
+
 class ClientCreate(BaseModel):
     ragione_sociale: str
     provincia: str = ""
@@ -286,6 +300,8 @@ class ClientCreate(BaseModel):
     telefono: str = ""
     email: str = ""
     partita_iva: str = ""
+    sede_nome: str = ""  # nominativo della sede principale (opzionale)
+    sites: Optional[List[Site]] = None  # sedi di scarico aggiuntive
     agent: Optional[str] = None
 
 
@@ -301,6 +317,8 @@ class ClientUpdate(BaseModel):
     telefono: Optional[str] = None
     email: Optional[str] = None
     partita_iva: Optional[str] = None
+    sede_nome: Optional[str] = None
+    sites: Optional[List[Site]] = None
     permanent_note: Optional[str] = None
     agent: Optional[str] = None
 
@@ -316,12 +334,35 @@ class EventCreate(BaseModel):
     activity_date: Optional[str] = None  # data attività (ISO o YYYY-MM-DD); default oggi
     collection_method: Optional[str] = None  # per incassi: contanti | bonifico | assegno
     collection_ref_date: Optional[str] = None  # per bonifico: data del bonifico (ISO)
+    site_id: Optional[str] = None  # sede di scarico selezionata ("principal" o id sede)
+    site_nominativo: Optional[str] = None
+    site_indirizzo: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
 # Serializers
 # ---------------------------------------------------------------------------
+def normalize_sites(sites) -> list:
+    """Normalizza una lista di sedi aggiuntive (oggetti Site o dict)."""
+    out = []
+    for s in sites or []:
+        d = s.dict() if hasattr(s, "dict") else dict(s)
+        out.append({
+            "id": d.get("id") or str(uuid.uuid4()),
+            "nominativo": (d.get("nominativo") or "").strip(),
+            "indirizzo": (d.get("indirizzo") or "").strip(),
+            "cap": (d.get("cap") or "").strip(),
+            "citta": (d.get("citta") or "").strip(),
+            "provincia": normalize_provincia(d.get("provincia") or ""),
+            "zona": (d.get("zona") or "").strip(),
+            "giro_id": d.get("giro_id") or None,
+            "position": d.get("position"),
+        })
+    return out
+
+
 def client_public(doc: dict) -> dict:
+    extra = doc.get("extra") or {}
     return {
         "id": doc["id"],
         "ragione_sociale": doc.get("ragione_sociale", ""),
@@ -338,8 +379,10 @@ def client_public(doc: dict) -> dict:
         "permanent_note": doc.get("permanent_note", ""),
         "last_visit_at": iso(doc.get("last_visit_at")),
         "snoozed_until": iso(doc.get("snoozed_until")),
-        "partita_iva": (doc.get("extra") or {}).get("partita_iva", ""),
-        "extra": doc.get("extra", {}),
+        "partita_iva": extra.get("partita_iva", ""),
+        "sede_nome": extra.get("sede_nome", ""),
+        "sites": extra.get("sites", []),
+        "extra": extra,
     }
 
 
@@ -361,6 +404,9 @@ def event_public(doc: dict) -> dict:
         "due_at": iso(doc.get("due_at")),
         "collection_method": doc.get("collection_method"),
         "collection_ref_date": doc.get("collection_ref_date"),
+        "site_id": doc.get("site_id"),
+        "site_nominativo": doc.get("site_nominativo"),
+        "site_indirizzo": doc.get("site_indirizzo"),
     }
 
 
@@ -856,24 +902,54 @@ def _compute_status(doc: dict, handled_month: set) -> str:
 
 @api.get("/clients")
 async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)):
+    # Prendiamo TUTTI i clienti dell'agente: una sede (principale o aggiuntiva)
+    # può appartenere a questo giro anche se la sede principale è altrove.
     docs = await db.clients.find(
-        {"giro_id": giro_id, "agent": user["username"], "deleted_at": None}, {"_id": 0}
-    ).to_list(5000)
-    docs.sort(key=lambda d: (d.get("position", 999), d.get("ragione_sociale", "").lower()))
+        {"agent": user["username"], "deleted_at": None}, {"_id": 0}
+    ).to_list(20000)
     ids = [d["id"] for d in docs]
     handled = await _handled_month_ids(ids)
     suspensions = await _active_suspensions_for(ids)
     last_ev = await _last_events_for(ids, ["order", "collection"])
-    result = []
+
+    rows = []
     for d in docs:
-        pub = client_public(d)
-        pub["status"] = _compute_status(d, handled)
-        pub["handled_this_month"] = d["id"] in handled
-        pub["suspensions"] = suspensions.get(d["id"], [])
-        pub["last_order_at"] = iso(last_ev["order"].get(d["id"]))
-        pub["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
-        result.append(pub)
-    return result
+        base = client_public(d)
+        base["status"] = _compute_status(d, handled)
+        base["handled_this_month"] = d["id"] in handled
+        base["suspensions"] = suspensions.get(d["id"], [])
+        base["last_order_at"] = iso(last_ev["order"].get(d["id"]))
+        base["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
+
+        # Sede principale (dati anagrafici del cliente)
+        if d.get("giro_id") == giro_id:
+            r = dict(base)
+            r["row_id"] = f'{d["id"]}:principal'
+            r["site_id"] = "principal"
+            r["site_nominativo"] = (d.get("extra") or {}).get("sede_nome") or ""
+            r["position"] = d.get("position")
+            rows.append(r)
+
+        # Sedi di scarico aggiuntive assegnate a questo giro
+        for s in (d.get("extra") or {}).get("sites", []):
+            if s.get("giro_id") == giro_id:
+                r = dict(base)
+                r["row_id"] = f'{d["id"]}:{s.get("id")}'
+                r["site_id"] = s.get("id")
+                r["site_nominativo"] = s.get("nominativo") or ""
+                r["indirizzo"] = s.get("indirizzo") or ""
+                r["citta"] = s.get("citta") or ""
+                r["zona"] = s.get("zona") or ""
+                r["cap"] = s.get("cap") or ""
+                r["provincia"] = s.get("provincia") or ""
+                r["position"] = s.get("position")
+                rows.append(r)
+
+    rows.sort(key=lambda r: (
+        r.get("position") if r.get("position") is not None else 999,
+        r.get("ragione_sociale", "").lower(),
+    ))
+    return rows
 
 
 @api.get("/clients/da-verificare")
@@ -987,7 +1063,11 @@ async def create_client(body: ClientCreate, user=Depends(get_current_user)):
         "permanent_note": "",
         "last_visit_at": None,
         "snoozed_until": None,
-        "extra": {"partita_iva": (body.partita_iva or "").strip()},
+        "extra": {
+            "partita_iva": (body.partita_iva or "").strip(),
+            "sede_nome": (body.sede_nome or "").strip(),
+            "sites": normalize_sites(body.sites),
+        },
         "created_by": user["username"],
         "deleted_at": None,
         "created_at": now_utc(),
@@ -1026,6 +1106,11 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
     set_doc = dict(update)
     if "partita_iva" in set_doc:
         set_doc["extra.partita_iva"] = (set_doc.pop("partita_iva") or "").strip()
+    if "sede_nome" in set_doc:
+        set_doc["extra.sede_nome"] = (set_doc.pop("sede_nome") or "").strip()
+    if "sites" in set_doc:
+        set_doc.pop("sites", None)
+        set_doc["extra.sites"] = normalize_sites(update.get("sites"))
     if update.get("giro_id"):
         set_doc["extra.needs_review"] = False
     await db.clients.update_one({"id": client_id, "deleted_at": None}, {"$set": set_doc})
@@ -1140,6 +1225,9 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
         "source": None,
         "collection_method": None,
         "collection_ref_date": None,
+        "site_id": body.site_id,
+        "site_nominativo": body.site_nominativo,
+        "site_indirizzo": body.site_indirizzo,
         "agent": user["username"],
         "created_at": base,
         "deleted_at": None,
@@ -1324,6 +1412,9 @@ async def list_activities(
             context = e.get("company_name") or ""
         else:
             context = giro_name or (cli.get("citta") if cli else "") or ""
+        site_nom = e.get("site_nominativo")
+        if site_nom:
+            context = f"{context} · {site_nom}" if context else site_nom
         out.append({
             "id": e["id"],
             "type": e["type"],
@@ -1337,6 +1428,7 @@ async def list_activities(
             "citta": cli.get("citta", "") if cli else "",
             "company_name": e.get("company_name"),
             "payment_mode": e.get("payment_mode"),
+            "site_nominativo": e.get("site_nominativo"),
         })
     return out
 

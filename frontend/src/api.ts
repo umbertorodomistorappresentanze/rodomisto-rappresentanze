@@ -118,7 +118,18 @@ export async function loginRequest(username: string, password: string) {
 // ---- Types ----
 export type Giro = { id: string; name: string; localities: string[]; order: number; active: boolean; client_count?: number };
 export type Company = { id: string; name: string; active: boolean; order: number };
-export type ClientExtra = Record<string, string>;
+export type ClientExtra = Record<string, any>;
+export type Site = {
+  id?: string;
+  nominativo: string;
+  indirizzo: string;
+  cap: string;
+  citta: string;
+  provincia: string;
+  zona: string;
+  giro_id: string | null;
+  position: number | null;
+};
 export type Client = {
   id: string;
   ragione_sociale: string;
@@ -142,7 +153,13 @@ export type Client = {
   handled_this_month?: boolean;
   suspensions?: string[];
   partita_iva?: string;
+  sede_nome?: string;
+  sites?: Site[];
   duplicates?: { id: string; ragione_sociale: string; citta: string; agent: string }[];
+  // Campi presenti solo nelle righe-sede della lista Giro Visite:
+  row_id?: string;
+  site_id?: string;
+  site_nominativo?: string;
 };
 export type PaymentMode = { key: string; label: string; days: number | null };
 
@@ -159,6 +176,7 @@ export type Activity = {
   citta: string;
   company_name: string | null;
   payment_mode?: string | null;
+  site_nominativo?: string | null;
 };
 
 export type VisitEvent = {
@@ -178,6 +196,9 @@ export type VisitEvent = {
   due_at?: string | null;
   collection_method?: string | null;
   collection_ref_date?: string | null;
+  site_id?: string | null;
+  site_nominativo?: string | null;
+  site_indirizzo?: string | null;
 };
 
 export type Suspension = {

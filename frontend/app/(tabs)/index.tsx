@@ -181,7 +181,7 @@ export default function Dashboard() {
 
       <SectionList
         sections={displaySections}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.row_id ?? item.id}
         stickySectionHeadersEnabled
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm }}
         refreshControl={

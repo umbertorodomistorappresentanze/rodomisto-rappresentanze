@@ -87,7 +87,14 @@ export const QuickActionsSheet = forwardRef<
     if (!client || busy) return;
     setBusy(true);
     try {
-      await apiPost("/events", { client_id: client.id, activity_date: toISODate(activityDate), ...payload });
+      await apiPost("/events", {
+        client_id: client.id,
+        activity_date: toISODate(activityDate),
+        site_id: client.site_id ?? null,
+        site_nominativo: client.site_nominativo || null,
+        site_indirizzo: client.indirizzo || null,
+        ...payload,
+      });
       modalRef.current?.dismiss();
       onSuccess(successMsg);
     } catch (e: any) {
@@ -122,6 +129,7 @@ export const QuickActionsSheet = forwardRef<
           </AppText>
           {client ? (
             <AppText style={styles.subtitle} numberOfLines={1}>
+              {client.site_nominativo ? `${client.site_nominativo} · ` : ""}
               {client.citta}{client.zona && client.zona !== client.citta ? ` · Zona ${client.zona}` : ""}
             </AppText>
           ) : null}

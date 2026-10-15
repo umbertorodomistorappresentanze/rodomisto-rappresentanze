@@ -1,5 +1,13 @@
 # AgendaVisite — PRD
 
+## Iter 36 (2026-10-15) — Sedi di Scarico multiple + Posizione nel Giro
+- Ogni cliente: sede principale (dati anagrafici + extra.sede_nome) + sedi aggiuntive extra.sites[]={id,nominativo,indirizzo,cap,citta,provincia,zona,giro_id,position}. Ogni sede ha Giro e Posizione nel giro indipendenti.
+- Lista Giro Visite: ogni sede (principale/aggiuntiva) appartenente al giro = RIGA SEPARATA (client-row con row_id univoco client_id:site_id), ordinata per Posizione nel giro poi ragione sociale. Mostra Ragione Sociale + Nominativo/Indirizzo sede.
+- Registrazione ordine/incasso/sospeso: salva site_id/site_nominativo/site_indirizzo sull'evento (resta nello storico cliente, con 📍). Intestazione sheet mostra la sede.
+- UI: src/components/sites-editor.tsx (add/rimuovi sedi + picker Giro + posizione) in client/new.tsx e client/edit/[id].tsx; campo "Nominativo sede principale"; client/[id] sezione read-only "Sedi di scarico aggiuntive".
+- Testing iter19: backend pytest 8/8 + frontend Playwright PASS per umberto e andrea. Nessun bug.
+
+
 ## Iter 35 (2026-10-08) — Modalità pagamento: menu a tendina + footer fisso (fix layout mobile)
 - Bottom sheet "Ordine effettuato": modalità pagamento ora MENU A TENDINA (order-pay-select apre/chiude lista order-pay-<key>); la selezione evidenzia e chiude il menu senza inviare. Footer FISSO fuori dallo scroll con "Conferma e Registra" (order-confirm), paddingBottom = safe-area insets, sempre visibile senza scroll. Testing iter18: PASS mobile 390x844 per umberto e andrea (footer visibile y=454).
 

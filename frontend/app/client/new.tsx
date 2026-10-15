@@ -6,10 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Check, MapTrifold, X } from "phosphor-react-native";
 
-import { apiGet, apiPost, Client, Giro } from "@/src/api";
+import { apiGet, apiPost, Client, Giro, Site } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { SitesEditor } from "@/src/components/sites-editor";
 import { normalizeProvincia } from "@/src/utils/provincia";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -28,6 +29,7 @@ export default function NewClient() {
   const [form, setForm] = useState({
     ragione_sociale: "",
     partita_iva: "",
+    sede_nome: "",
     provincia: "",
     citta: "",
     zona: "",
@@ -37,6 +39,7 @@ export default function NewClient() {
     email: "",
     position: "",
   });
+  const [sites, setSites] = useState<Site[]>([]);
   const [giroId, setGiroId] = useState<string | null>(null);
   const [showGiro, setShowGiro] = useState(false);
   const [agent, setAgent] = useState<"umberto" | "andrea">(
@@ -50,6 +53,7 @@ export default function NewClient() {
       apiPost<Client>("/clients", {
         ragione_sociale: form.ragione_sociale.trim(),
         partita_iva: form.partita_iva.trim(),
+        sede_nome: form.sede_nome.trim(),
         provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
@@ -59,6 +63,7 @@ export default function NewClient() {
         email: form.email.trim(),
         giro_id: giroId,
         position: form.position ? parseInt(form.position, 10) : null,
+        sites,
         agent: isAdmin ? agent : undefined,
       }),
     onSuccess: () => {
@@ -137,6 +142,7 @@ export default function NewClient() {
         </View>
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="f-position" />
+        <LabeledInput label="Nominativo sede principale (opzionale)" value={form.sede_nome} onChange={set("sede_nome")} testID="f-sede-nome" />
         <View>
           <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
           <TextInput
@@ -158,6 +164,9 @@ export default function NewClient() {
         <LabeledInput label="CAP" value={form.cap} onChange={set("cap")} keyboardType="number-pad" testID="f-cap" />
         <LabeledInput label="Telefono" value={form.telefono} onChange={set("telefono")} keyboardType="phone-pad" testID="f-telefono" />
         <LabeledInput label="Email" value={form.email} onChange={set("email")} keyboardType="email-address" testID="f-email" />
+
+        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.sm }} />
+        <SitesEditor value={sites} onChange={setSites} giri={giriQuery.data ?? []} />
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>

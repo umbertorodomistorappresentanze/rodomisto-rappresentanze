@@ -247,7 +247,31 @@ export default function ClientDetail() {
           ) : null}
         </View>
 
-        {/* Permanent note */}
+        {/* Sedi di scarico aggiuntive (sola lettura) */}
+        {(client.sites ?? []).length > 0 ? (
+          <View style={styles.card}>
+            <AppText weight="semibold" style={styles.cardTitle}>Sedi di scarico aggiuntive</AppText>
+            <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
+              {(client.sites ?? []).map((s, i) => {
+                const gName = giriQuery.data?.find((g) => g.id === s.giro_id)?.name;
+                return (
+                  <View key={s.id ?? i} style={styles.siteRow} testID={`detail-site-${i}`}>
+                    <AppText weight="semibold" style={styles.siteRowTitle}>
+                      {s.nominativo || `Sede ${i + 1}`}
+                    </AppText>
+                    <AppText style={styles.siteRowMeta}>
+                      {[s.indirizzo, s.cap, s.citta, s.provincia].filter(Boolean).join(" · ")}
+                    </AppText>
+                    <AppText style={styles.siteRowMeta}>
+                      {gName ? `Giro: ${gName}` : "Nessun giro"}
+                      {s.position != null ? ` · Pos. ${s.position}` : ""}
+                    </AppText>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         <View style={styles.card}>
           <AppText weight="semibold" style={styles.cardTitle}>Nota permanente cliente</AppText>
           <TextInput
@@ -300,6 +324,7 @@ export default function ClientDetail() {
                 if (ev.type === "recurrence_order" && ev.recurrence_company) detail = `${ev.recurrence_company} · ${ev.recurrence_period ?? ""}`;
                 if (ev.type === "note" && ev.note_text) detail = ev.note_text;
                 if (ev.type === "reschedule" && ev.reschedule_until) detail = `Rivedere il ${shortDate(ev.reschedule_until)}`;
+                if (ev.site_nominativo) detail = detail ? `${detail} · 📍 ${ev.site_nominativo}` : `📍 ${ev.site_nominativo}`;
                 return (
                   <View key={ev.id} style={styles.eventRow} testID={`event-${ev.id}`}>
                     <View style={styles.eventIcon}>
@@ -394,6 +419,9 @@ const useStyles = makeStyles((c) => ({
     borderWidth: 1, borderColor: c.error, borderRadius: radius.md, minHeight: 52,
   },
   deleteText: { fontSize: 16, color: c.error },
+  siteRow: { backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, borderRadius: radius.md, padding: spacing.md, gap: 2 },
+  siteRowTitle: { fontSize: 14, color: c.brand },
+  siteRowMeta: { fontSize: 13, color: c.muted },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   modalCard: { backgroundColor: c.surface, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.md, width: "100%", maxWidth: 400, alignItems: "center" },
   modalIcon: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },

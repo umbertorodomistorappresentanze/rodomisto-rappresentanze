@@ -1,5 +1,5 @@
 import { Pressable, View } from "react-native";
-import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone, Warning } from "phosphor-react-native";
+import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone, Storefront, Warning } from "phosphor-react-native";
 
 import { Client } from "@/src/api";
 import { AppText } from "@/src/components/ui";
@@ -21,6 +21,7 @@ const useStyles = makeStyles((c) => ({
   },
   info: { flex: 1, gap: 3 },
   name: { fontSize: 16, color: c.onSurface },
+  siteName: { fontSize: 13, color: c.brand },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
   meta: { fontSize: 13, color: c.muted },
   suspBox: {
@@ -68,6 +69,7 @@ export function ClientRow({
   const { colors } = useTheme();
 
   const zonaDiff = client.zona && client.zona !== client.citta;
+  const rowKey = client.row_id ?? client.id;
 
   // "Ultima azione" persistente (indipendente dal ciclo 21 giorni): mostra
   // l'azione più recente tra ordine, incasso e visita, oppure "Mai visitato".
@@ -78,7 +80,7 @@ export function ClientRow({
 
   return (
     <Pressable
-      testID={`client-row-${client.id}`}
+      testID={`client-row-${rowKey}`}
       onPress={() => onActions(client)}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
     >
@@ -86,10 +88,18 @@ export function ClientRow({
         <AppText weight="semibold" style={styles.name} numberOfLines={1}>
           {client.ragione_sociale}
         </AppText>
+        {client.site_nominativo ? (
+          <View style={styles.metaRow}>
+            <Storefront size={13} color={colors.brand} weight="fill" />
+            <AppText weight="semibold" style={styles.siteName} numberOfLines={1}>
+              {client.site_nominativo}
+            </AppText>
+          </View>
+        ) : null}
         <View style={styles.metaRow}>
           <MapPin size={13} color={colors.muted} weight="bold" />
           <AppText style={styles.meta} numberOfLines={1}>
-            {client.citta}
+            {client.indirizzo ? `${client.indirizzo} · ` : ""}{client.citta}
             {zonaDiff ? ` · Zona ${client.zona}` : ""}
           </AppText>
         </View>
@@ -113,7 +123,7 @@ export function ClientRow({
       </View>
 
       <Pressable
-        testID={`client-history-${client.id}`}
+        testID={`client-history-${rowKey}`}
         onPress={() => onHistory(client)}
         hitSlop={6}
         style={styles.historyBtn}
@@ -121,7 +131,7 @@ export function ClientRow({
         <ClockCounterClockwise size={20} color={colors.onSurfaceSecondary} weight="bold" />
       </Pressable>
       <Pressable
-        testID={`client-actions-${client.id}`}
+        testID={`client-actions-${rowKey}`}
         onPress={() => onActions(client)}
         hitSlop={6}
         style={styles.actionsBtn}
