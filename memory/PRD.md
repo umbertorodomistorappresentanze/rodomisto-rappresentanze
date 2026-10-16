@@ -1,5 +1,11 @@
 # AgendaVisite — PRD
 
+## Iter 39 (2026-10-16) — GooseApp: esploratore tabelle/campi (fix #120)
+- Backend: /api/goose/tables e /api/goose/structure/{t} ora NORMALIZZANO la risposta in {tables:[{name,description}]} / {fields:[{name,type}]} + raw (tolleranti a liste di stringhe/dict/dict). Gestione #111 mostra l'IP in uscita.
+- Frontend goose-sync.tsx: "Scopri tabelle (live)" elenca le tabelle reali; toccando una tabella si impostano orders_table e si caricano i suoi campi; toccando un campo lo si assegna a Partita IVA/Codice sede/Mandante/N.documento/Data/ID ordine. Mappatura manuale sempre modificabile + Salva. Riquadro errore persistente/selezionabile.
+- Scopo: risolvere #120 (tabella inesistente) evitando di indovinare i nomi: l'admin seleziona la tabella/ i campi reali di GooseApp dal vivo (da eseguire su Render, whitelisted).
+
+
 ## Iter 37 (2026-10-16) — Integrazione GooseApp (sincronizzazione ordini)
 - Modulo backend frontend/api/gooseapp.py (client httpx: SELECT/TABLES/STRUCTURE, code+key da env GOOSEAPP_CODE/KEY, hint errore #111 IP whitelist). Endpoint: /api/goose/status, /api/goose/config (admin GET/PUT), /api/goose/tables + /structure (admin), /api/goose/sync (import; accetta mock_records solo admin per test senza API live).
 - Import: match cliente per PARTITA IVA normalizzata; match sede per codice GooseApp (Site.goose_code o extra.goose_code principale) con fallback sede principale; crea evento order source=gooseapp con goose_order_id (dedup), company_name=mandante, sede. Agente importa solo i propri clienti, admin tutti.

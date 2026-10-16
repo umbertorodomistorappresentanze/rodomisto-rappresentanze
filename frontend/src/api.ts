@@ -270,3 +270,5 @@ export type GooseConfig = {
   field_number: string;
   field_date: string;
 };
+export type GooseTablesResp = { tables: { name: string; description: string }[]; raw: any };
+export type GooseFieldsResp = { fields: { name: string; type: string }[]; raw: any };

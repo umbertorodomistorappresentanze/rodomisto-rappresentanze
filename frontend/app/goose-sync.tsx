@@ -5,11 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { ArrowsClockwise, CaretLeft, CheckCircle, Gear, Warning, XCircle } from "phosphor-react-native";
 
-import { apiGet, apiPost, apiPut, GooseConfig, GooseStatus } from "@/src/api";
+import { apiGet, apiPost, apiPut, GooseConfig, GooseFieldsResp, GooseStatus, GooseTablesResp } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
+
+const ASSIGN_LABELS: Record<string, string> = {
+  field_piva: "Partita IVA",
+  field_site: "Codice sede",
+  field_company: "Mandante",
+  field_number: "N. documento",
+  field_date: "Data ordine",
+  field_order_id: "ID ordine",
+};
+const ASSIGN_KEYS: (keyof import("@/src/api").GooseConfig)[] = [
+  "field_piva", "field_site", "field_company", "field_number", "field_date", "field_order_id",
+];
 
 export default function GooseSyncScreen() {
   const styles = useStyles();
@@ -31,6 +43,10 @@ export default function GooseSyncScreen() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [cfg, setCfg] = useState<Partial<GooseConfig> | null>(null);
   const [showConfig, setShowConfig] = useState(false);
+  const [tables, setTables] = useState<{ name: string; description: string }[] | null>(null);
+  const [fieldsFor, setFieldsFor] = useState<string | null>(null);
+  const [fields, setFields] = useState<{ name: string; type: string }[] | null>(null);
+  const [assignField, setAssignField] = useState<string | null>(null);
 
   const config = cfg ?? configQuery.data ?? null;
   const setField = (k: keyof GooseConfig) => (v: string) => setCfg({ ...(config ?? {}), [k]: v });
@@ -69,9 +85,13 @@ export default function GooseSyncScreen() {
     setBusy(true);
     setLastError(null);
     try {
-      const res = await apiGet<any>("/goose/tables");
-      const names = Array.isArray(res?.data) ? res.data : res;
-      toast(`Tabelle: ${JSON.stringify(names).slice(0, 120)}`, "success");
+      const res = await apiGet<GooseTablesResp>("/goose/tables");
+      setTables(res.tables ?? []);
+      if (!res.tables?.length) {
+        toast(`Nessuna tabella riconosciuta. Risposta: ${JSON.stringify(res.raw).slice(0, 150)}`, "error");
+      } else {
+        toast(`Trovate ${res.tables.length} tabelle`, "success");
+      }
     } catch (e: any) {
       const msg = e?.detail || "Scoperta non riuscita";
       setLastError(msg);
@@ -79,6 +99,35 @@ export default function GooseSyncScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function selectTable(name: string) {
+    setCfg({ ...(config ?? {}), orders_table: name });
+    setFieldsFor(name);
+    setFields(null);
+    setAssignField(null);
+    setBusy(true);
+    setLastError(null);
+    try {
+      const res = await apiGet<GooseFieldsResp>(`/goose/structure/${encodeURIComponent(name)}`);
+      setFields(res.fields ?? []);
+      if (!res.fields?.length) {
+        toast(`Nessun campo riconosciuto. Risposta: ${JSON.stringify(res.raw).slice(0, 150)}`, "error");
+      }
+    } catch (e: any) {
+      const msg = e?.detail || "Lettura campi non riuscita";
+      setLastError(msg);
+      toast(msg, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function assignTo(key: keyof GooseConfig) {
+    if (!assignField) return;
+    setCfg({ ...(config ?? {}), [key]: assignField });
+    toast(`${assignField} → ${ASSIGN_LABELS[key]}`, "success");
+    setAssignField(null);
   }
 
   if (statusQuery.isLoading) return <Loading />;
@@ -172,8 +221,67 @@ export default function GooseSyncScreen() {
             {showConfig && config ? (
               <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                 <AppText style={styles.hint}>
-                  Imposta il nome della tabella Ordini di GooseApp e i nomi dei campi. Usa &quot;Scopri tabelle&quot; dopo aver abilitato gli IP di Render nella whitelist GooseApp.
+                  1. Premi &quot;Scopri tabelle&quot; per leggere le tabelle reali di GooseApp. 2. Tocca la tabella degli Ordini. 3. Tocca ciascun campo e assegnalo (Partita IVA, codice sede, ecc.). 4. Salva.
                 </AppText>
+
+                <Button title={busy ? "Attendi…" : "Scopri tabelle (live)"} variant="ghost" onPress={discoverTables} testID="goose-discover" />
+
+                {/* Elenco tabelle reali */}
+                {tables ? (
+                  <View style={styles.explorer}>
+                    <AppText weight="semibold" style={styles.explorerTitle}>Tabelle ({tables.length})</AppText>
+                    {tables.length === 0 ? (
+                      <AppText style={styles.hint}>Nessuna tabella. Controlla la whitelist IP e riprova.</AppText>
+                    ) : (
+                      <View style={styles.chipWrap}>
+                        {tables.map((t) => {
+                          const on = config.orders_table === t.name;
+                          return (
+                            <Pressable key={t.name} testID={`goose-table-${t.name}`} onPress={() => selectTable(t.name)} style={[styles.chip, on && styles.chipOn]}>
+                              <AppText weight="semibold" style={[styles.chipText, on && styles.chipTextOn]}>{t.name}</AppText>
+                              {t.description ? <AppText style={[styles.chipDesc, on && styles.chipTextOn]}>{t.description}</AppText> : null}
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+
+                {/* Campi della tabella selezionata */}
+                {fields && fieldsFor ? (
+                  <View style={styles.explorer}>
+                    <AppText weight="semibold" style={styles.explorerTitle}>Campi di {fieldsFor} ({fields.length})</AppText>
+                    <AppText style={styles.hint}>Tocca un campo per assegnarlo a un&apos;etichetta.</AppText>
+                    <View style={styles.chipWrap}>
+                      {fields.map((f) => {
+                        const assigned = ASSIGN_KEYS.find((k) => config[k] === f.name);
+                        const sel = assignField === f.name;
+                        return (
+                          <Pressable key={f.name} testID={`goose-field-${f.name}`} onPress={() => setAssignField(sel ? null : f.name)} style={[styles.chip, sel && styles.chipOn, !!assigned && styles.chipAssigned]}>
+                            <AppText weight="semibold" style={[styles.chipText, sel && styles.chipTextOn]}>{f.name}</AppText>
+                            {assigned ? <AppText style={styles.chipDesc}>→ {ASSIGN_LABELS[assigned]}</AppText> : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {assignField ? (
+                      <View style={styles.assignBox}>
+                        <AppText weight="semibold" style={styles.assignTitle}>Assegna &quot;{assignField}&quot; a:</AppText>
+                        <View style={styles.chipWrap}>
+                          {ASSIGN_KEYS.map((k) => (
+                            <Pressable key={k} testID={`goose-assign-${k}`} onPress={() => assignTo(k)} style={styles.assignBtn}>
+                              <AppText weight="semibold" style={styles.assignBtnText}>{ASSIGN_LABELS[k]}</AppText>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
+                <AppText weight="semibold" style={styles.explorerTitle}>Mappatura (modificabile a mano)</AppText>
                 <CfgField label="Tabella Ordini" value={config.orders_table ?? ""} onChange={setField("orders_table")} />
                 <CfgField label="Campo Partita IVA" value={config.field_piva ?? ""} onChange={setField("field_piva")} />
                 <CfgField label="Campo codice sede" value={config.field_site ?? ""} onChange={setField("field_site")} />
@@ -182,7 +290,6 @@ export default function GooseSyncScreen() {
                 <CfgField label="Campo data ordine" value={config.field_date ?? ""} onChange={setField("field_date")} />
                 <CfgField label="Campo ID ordine" value={config.field_order_id ?? ""} onChange={setField("field_order_id")} />
                 <Button title="Salva configurazione" onPress={saveConfig} testID="goose-config-save" />
-                <Button title="Scopri tabelle (live)" variant="ghost" onPress={discoverTables} testID="goose-discover" />
               </View>
             ) : null}
           </View>
@@ -232,4 +339,17 @@ const useStyles = makeStyles((c) => ({
   hint: { fontSize: 12, color: c.muted, lineHeight: 18 },
   cfgLabel: { fontSize: 13, color: c.onSurfaceTertiary, marginBottom: spacing.xs },
   cfgInput: { borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 46, fontFamily: "PlusJakarta-Medium", fontSize: 15, color: c.onSurface },
+  explorer: { gap: spacing.sm, backgroundColor: c.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
+  explorerTitle: { fontSize: 14, color: c.onSurface },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  chip: { borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: radius.sm, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
+  chipOn: { borderColor: c.brand, backgroundColor: c.brandSecondary },
+  chipAssigned: { borderColor: c.success },
+  chipText: { fontSize: 13, color: c.onSurface },
+  chipTextOn: { color: c.brand },
+  chipDesc: { fontSize: 11, color: c.muted },
+  assignBox: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: c.border, paddingTop: spacing.sm },
+  assignTitle: { fontSize: 13, color: c.onSurface },
+  assignBtn: { borderWidth: 1, borderColor: c.brand, backgroundColor: c.brandSecondary, borderRadius: radius.sm, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
+  assignBtnText: { fontSize: 13, color: c.brand },
 }));

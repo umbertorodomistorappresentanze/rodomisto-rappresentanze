@@ -2141,11 +2141,56 @@ async def goose_put_config(body: GooseConfigBody, user=Depends(require_admin)):
     return await _goose_config()
 
 
+def _normalize_tables(result) -> list:
+    """Estrae una lista uniforme [{name, description}] dalla risposta TABLES,
+    tollerante a formati diversi (lista di stringhe, lista di dict, dict)."""
+    data = result.get("data") if isinstance(result, dict) else result
+    if not isinstance(data, list):
+        if isinstance(result, dict):
+            data = [{"name": k, "description": v} for k, v in result.items()
+                    if k not in ("total", "data", "status")]
+        else:
+            data = []
+    out = []
+    for item in data:
+        if isinstance(item, str):
+            out.append({"name": item, "description": ""})
+        elif isinstance(item, dict):
+            name = item.get("table") or item.get("name") or item.get("code") or item.get("id") or item.get("tabella") or ""
+            desc = (item.get("description") or item.get("label") or item.get("desc")
+                    or item.get("descrizione") or item.get("nome") or "")
+            if name:
+                out.append({"name": str(name), "description": str(desc)})
+    return out
+
+
+def _normalize_fields(result) -> list:
+    """Estrae una lista uniforme [{name, type}] dalla risposta STRUCTURE."""
+    data = None
+    if isinstance(result, dict):
+        data = result.get("fields") or result.get("data") or result.get("structure") or result.get("campi")
+    if data is None:
+        data = result if isinstance(result, list) else []
+    out = []
+    if isinstance(data, dict):
+        data = [{"name": k, "type": v} for k, v in data.items()]
+    for item in (data or []):
+        if isinstance(item, str):
+            out.append({"name": item, "type": ""})
+        elif isinstance(item, dict):
+            name = item.get("field") or item.get("name") or item.get("code") or item.get("id") or item.get("campo") or ""
+            typ = item.get("type") or item.get("tipo") or item.get("datatype") or ""
+            if name:
+                out.append({"name": str(name), "type": str(typ)})
+    return out
+
+
 @api.get("/goose/tables")
 async def goose_tables(structure: bool = False, user=Depends(require_admin)):
     """Scoperta schema: elenco tabelle GooseApp (richiede IP in whitelist)."""
     try:
-        return await gooseapp.list_tables(with_structure=structure)
+        result = await gooseapp.list_tables(with_structure=structure)
+        return {"tables": _normalize_tables(result), "raw": result}
     except gooseapp.GooseError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -2153,7 +2198,8 @@ async def goose_tables(structure: bool = False, user=Depends(require_admin)):
 @api.get("/goose/structure/{table}")
 async def goose_structure(table: str, user=Depends(require_admin)):
     try:
-        return await gooseapp.get_structure(table)
+        result = await gooseapp.get_structure(table)
+        return {"fields": _normalize_fields(result), "raw": result}
     except gooseapp.GooseError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
