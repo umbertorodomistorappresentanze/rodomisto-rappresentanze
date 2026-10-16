@@ -412,6 +412,8 @@ def event_public(doc: dict) -> dict:
         "site_id": doc.get("site_id"),
         "site_nominativo": doc.get("site_nominativo"),
         "site_indirizzo": doc.get("site_indirizzo"),
+        "order_number": doc.get("order_number"),
+        "source": doc.get("source"),
     }
 
 
@@ -1417,7 +1419,10 @@ async def list_activities(
         cli = cmap.get(e["client_id"], {})
         giro_name = gmap.get(cli.get("giro_id")) if cli else None
         if e["type"] in ("order", "collection", "suspension"):
-            context = e.get("company_name") or ""
+            if e.get("order_number"):
+                context = f"Ordine N. {e.get('order_number')}"
+            else:
+                context = e.get("company_name") or ""
         else:
             context = giro_name or (cli.get("citta") if cli else "") or ""
         site_nom = e.get("site_nominativo")
@@ -1437,6 +1442,7 @@ async def list_activities(
             "company_name": e.get("company_name"),
             "payment_mode": e.get("payment_mode"),
             "site_nominativo": e.get("site_nominativo"),
+            "order_number": e.get("order_number"),
         })
     return out
 
@@ -2014,6 +2020,19 @@ def _parse_goose_date(raw) -> Optional[datetime]:
     return None
 
 
+def _clean_doc_number(raw) -> str:
+    """Ricava il numero ordine/documento 'pulito' (es. DTNUM) nascondendo il
+    RECORD_ID interno. Se il valore è composito (es. '2504111729051590-143' o
+    '...–143'), prende l'ultimo segmento dopo il trattino."""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    s = s.replace("\u2013", "-").replace("\u2014", "-")  # en/em dash -> '-'
+    if "-" in s:
+        s = s.rsplit("-", 1)[-1].strip()
+    return s
+
+
 def _match_site(cli: dict, site_ref: str) -> dict:
     """Associa il codice sede dell'ordine GooseApp a una sede del cliente.
     Fallback: sede principale."""
@@ -2069,13 +2088,15 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
             site = _match_site(cli, str(rec.get(cfg.get("field_site") or "") or ""))
             created = _parse_goose_date(rec.get(cfg.get("field_date") or "")) or now_utc()
             company_name = str(rec.get(cfg.get("field_company") or "") or "").strip() or None
+            order_number = _clean_doc_number(rec.get(cfg.get("field_number"))) if cfg.get("field_number") else ""
             doc = {
                 "id": str(uuid.uuid4()),
                 "client_id": cli["id"],
                 "type": "order",
                 "company_id": None,
                 "company_name": company_name,
-                "note_text": (f"Documento {rec.get(cfg.get('field_number'))}" if cfg.get("field_number") and rec.get(cfg.get("field_number")) else None),
+                "note_text": None,
+                "order_number": order_number or None,
                 "reschedule_until": None,
                 "payment_mode": None,
                 "due_at": None,

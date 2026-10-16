@@ -315,9 +315,13 @@ export default function ClientDetail() {
                 const meta = EVENT_META[ev.type] ?? { label: ev.type, icon: NotePencil };
                 const Icon = meta.icon;
                 let detail = "";
-                if (ev.type === "order" && ev.company_name) {
-                  detail = ev.payment_mode_label ? `${ev.company_name} · ${ev.payment_mode_label}` : ev.company_name;
-                  if (ev.due_at) detail += ` · scad. ${shortDate(ev.due_at)}`;
+                if (ev.type === "order") {
+                  if (ev.order_number) {
+                    detail = `Ordine N. ${ev.order_number}`;
+                  } else if (ev.company_name) {
+                    detail = ev.payment_mode_label ? `${ev.company_name} · ${ev.payment_mode_label}` : ev.company_name;
+                    if (ev.due_at) detail += ` · scad. ${shortDate(ev.due_at)}`;
+                  }
                 }
                 if (ev.type === "collection" && ev.company_name) detail = `Incasso ${ev.company_name}`;
                 if (ev.type === "suspension" && ev.company_name) detail = ev.company_name;

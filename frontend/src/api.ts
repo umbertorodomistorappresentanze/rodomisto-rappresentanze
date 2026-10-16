@@ -179,6 +179,7 @@ export type Activity = {
   company_name: string | null;
   payment_mode?: string | null;
   site_nominativo?: string | null;
+  order_number?: string | null;
 };
 
 export type VisitEvent = {
@@ -201,6 +202,8 @@ export type VisitEvent = {
   site_id?: string | null;
   site_nominativo?: string | null;
   site_indirizzo?: string | null;
+  order_number?: string | null;
+  source?: string | null;
 };
 
 export type Suspension = {
