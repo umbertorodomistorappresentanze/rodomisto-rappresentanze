@@ -2141,6 +2141,16 @@ async def goose_put_config(body: GooseConfigBody, user=Depends(require_admin)):
     return await _goose_config()
 
 
+def _ci_get(d: dict, *keys):
+    """Lettura case-insensitive: ritorna il primo valore non vuoto tra le chiavi date."""
+    lower = {str(k).lower(): v for k, v in d.items()}
+    for k in keys:
+        v = lower.get(str(k).lower())
+        if v not in (None, ""):
+            return v
+    return None
+
+
 def _normalize_tables(result) -> list:
     """Estrae una lista uniforme [{name, description}] dalla risposta TABLES,
     tollerante a formati diversi (lista di stringhe, lista di dict, dict)."""
@@ -2156,19 +2166,20 @@ def _normalize_tables(result) -> list:
         if isinstance(item, str):
             out.append({"name": item, "description": ""})
         elif isinstance(item, dict):
-            name = item.get("table") or item.get("name") or item.get("code") or item.get("id") or item.get("tabella") or ""
-            desc = (item.get("description") or item.get("label") or item.get("desc")
-                    or item.get("descrizione") or item.get("nome") or "")
+            name = _ci_get(item, "table", "name", "code", "id", "tabella", "field") or ""
+            desc = _ci_get(item, "description", "label", "desc", "descrizione", "nome") or ""
             if name:
                 out.append({"name": str(name), "description": str(desc)})
     return out
 
 
 def _normalize_fields(result) -> list:
-    """Estrae una lista uniforme [{name, type}] dalla risposta STRUCTURE."""
+    """Estrae una lista uniforme [{name, type}] dalla risposta STRUCTURE.
+    GooseApp (DOC_TES) usa result.data con oggetti {"Field": "...", ...}."""
     data = None
     if isinstance(result, dict):
-        data = result.get("fields") or result.get("data") or result.get("structure") or result.get("campi")
+        data = (result.get("data") or result.get("fields") or result.get("structure")
+                or result.get("campi"))
     if data is None:
         data = result if isinstance(result, list) else []
     out = []
@@ -2178,8 +2189,8 @@ def _normalize_fields(result) -> list:
         if isinstance(item, str):
             out.append({"name": item, "type": ""})
         elif isinstance(item, dict):
-            name = item.get("field") or item.get("name") or item.get("code") or item.get("id") or item.get("campo") or ""
-            typ = item.get("type") or item.get("tipo") or item.get("datatype") or ""
+            name = _ci_get(item, "Field", "field", "name", "code", "id", "campo") or ""
+            typ = _ci_get(item, "type", "tipo", "datatype", "Type") or ""
             if name:
                 out.append({"name": str(name), "type": str(typ)})
     return out
