@@ -29,7 +29,7 @@ export default function EditClient() {
   const giriQuery = useQuery({ queryKey: ["giri"], queryFn: () => apiGet<Giro[]>("/giri") });
 
   const [form, setForm] = useState({
-    ragione_sociale: "", partita_iva: "", sede_nome: "", provincia: "", citta: "", zona: "",
+    ragione_sociale: "", partita_iva: "", sede_nome: "", goose_code: "", provincia: "", citta: "", zona: "",
     indirizzo: "", cap: "", telefono: "", email: "", position: "",
   });
   const [sites, setSites] = useState<Site[]>([]);
@@ -44,6 +44,7 @@ export default function EditClient() {
       ragione_sociale: c.ragione_sociale ?? "",
       partita_iva: c.partita_iva ?? (c.extra?.partita_iva ?? ""),
       sede_nome: c.sede_nome ?? (c.extra?.sede_nome ?? ""),
+      goose_code: c.goose_code ?? (c.extra?.goose_code ?? ""),
       provincia: c.provincia ?? "",
       citta: c.citta ?? "",
       zona: c.zona ?? "",
@@ -66,6 +67,7 @@ export default function EditClient() {
         ragione_sociale: form.ragione_sociale.trim(),
         partita_iva: form.partita_iva.trim(),
         sede_nome: form.sede_nome.trim(),
+        goose_code: form.goose_code.trim(),
         provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
@@ -150,6 +152,7 @@ export default function EditClient() {
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="e-position" />
         <LabeledInput label="Nominativo sede principale (opzionale)" value={form.sede_nome} onChange={set("sede_nome")} testID="e-sede-nome" />
+        <LabeledInput label="Codice GooseApp sede principale (opzionale)" value={form.goose_code} onChange={set("goose_code")} testID="e-goose-code" />
         <View>
           <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
           <TextInput

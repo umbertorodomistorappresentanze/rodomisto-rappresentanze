@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, SectionList, TextInput, View } from "react-n
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { CaretRight, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, WarningCircle, X } from "phosphor-react-native";
+import { ArrowsClockwise, CaretRight, MagnifyingGlass, MapTrifold, Plus, SunHorizon, Users, WarningCircle, X } from "phosphor-react-native";
 
 import { apiGet, Client, Company, Giro, PaymentMode, Suspension } from "@/src/api";
 import { useAuth } from "@/src/auth";
@@ -137,6 +137,12 @@ export default function Dashboard() {
             </AppText>
           </Pressable>
         </View>
+
+        <Pressable testID="goose-sync-entry" onPress={() => router.push("/goose-sync")} style={styles.gooseBtn}>
+          <ArrowsClockwise size={18} color={colors.brand} weight="bold" />
+          <AppText weight="semibold" style={styles.gooseBtnText}>Sincronizza ordini GooseApp</AppText>
+          <CaretRight size={16} color={colors.brand} weight="bold" />
+        </Pressable>
 
         {activeGiroId && !searching ? (
           <AppText weight="bold" style={styles.blockLabel}>GIRO VISITE CLIENTI</AppText>
@@ -283,6 +289,13 @@ const useStyles = makeStyles((c) => ({
   },
   headerTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   quickRow: { flexDirection: "row", gap: spacing.md },
+  gooseBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    backgroundColor: c.brandSecondary, borderWidth: 1, borderColor: c.brand,
+    borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  gooseBtnText: { flex: 1, fontSize: 14, color: c.brand },
   quickCard: {
     flex: 1,
     backgroundColor: c.surfaceSecondary,

@@ -286,6 +286,7 @@ class Site(BaseModel):
     zona: str = ""
     giro_id: Optional[str] = None
     position: Optional[int] = None
+    goose_code: str = ""  # codice/riferimento sede su GooseApp (per il match ordini)
 
 
 class ClientCreate(BaseModel):
@@ -301,6 +302,7 @@ class ClientCreate(BaseModel):
     email: str = ""
     partita_iva: str = ""
     sede_nome: str = ""  # nominativo della sede principale (opzionale)
+    goose_code: str = ""  # codice sede principale su GooseApp
     sites: Optional[List[Site]] = None  # sedi di scarico aggiuntive
     agent: Optional[str] = None
 
@@ -318,6 +320,7 @@ class ClientUpdate(BaseModel):
     email: Optional[str] = None
     partita_iva: Optional[str] = None
     sede_nome: Optional[str] = None
+    goose_code: Optional[str] = None
     sites: Optional[List[Site]] = None
     permanent_note: Optional[str] = None
     agent: Optional[str] = None
@@ -357,6 +360,7 @@ def normalize_sites(sites) -> list:
             "zona": (d.get("zona") or "").strip(),
             "giro_id": d.get("giro_id") or None,
             "position": d.get("position"),
+            "goose_code": (d.get("goose_code") or "").strip(),
         })
     return out
 
@@ -381,6 +385,7 @@ def client_public(doc: dict) -> dict:
         "snoozed_until": iso(doc.get("snoozed_until")),
         "partita_iva": extra.get("partita_iva", ""),
         "sede_nome": extra.get("sede_nome", ""),
+        "goose_code": extra.get("goose_code", ""),
         "sites": extra.get("sites", []),
         "extra": extra,
     }
@@ -1066,6 +1071,7 @@ async def create_client(body: ClientCreate, user=Depends(get_current_user)):
         "extra": {
             "partita_iva": (body.partita_iva or "").strip(),
             "sede_nome": (body.sede_nome or "").strip(),
+            "goose_code": (body.goose_code or "").strip(),
             "sites": normalize_sites(body.sites),
         },
         "created_by": user["username"],
@@ -1108,6 +1114,8 @@ async def update_client(client_id: str, body: ClientUpdate, user=Depends(get_cur
         set_doc["extra.partita_iva"] = (set_doc.pop("partita_iva") or "").strip()
     if "sede_nome" in set_doc:
         set_doc["extra.sede_nome"] = (set_doc.pop("sede_nome") or "").strip()
+    if "goose_code" in set_doc:
+        set_doc["extra.goose_code"] = (set_doc.pop("goose_code") or "").strip()
     if "sites" in set_doc:
         set_doc.pop("sites", None)
         set_doc["extra.sites"] = normalize_sites(update.get("sites"))
@@ -1940,7 +1948,238 @@ async def export_monthly(giro_id: str = Query(...), year: int = Query(...), user
     )
 
 
+# ---------------------------------------------------------------------------
+# Integrazione GooseApp (sincronizzazione ordini)
+# ---------------------------------------------------------------------------
+import gooseapp  # noqa: E402
+
+# Mappatura campi configurabile: i nomi tabella/campi reali di GooseApp si
+# scoprono con TABLES/STRUCTURE (dopo whitelist IP su Render) e si salvano qui.
+GOOSE_DEFAULT_CONFIG = {
+    "orders_table": "",       # es. "DOC_TES" (da scoprire)
+    "field_order_id": "RECORD_ID",
+    "field_piva": "",         # campo con la Partita IVA del cliente
+    "field_site": "",         # campo con il codice sede/destinazione
+    "field_company": "",      # campo con il mandante/azienda
+    "field_number": "",       # numero documento
+    "field_date": "",         # data ordine (yyyy-mm-dd ...)
+}
+
+
+class GooseConfigBody(BaseModel):
+    orders_table: Optional[str] = None
+    field_order_id: Optional[str] = None
+    field_piva: Optional[str] = None
+    field_site: Optional[str] = None
+    field_company: Optional[str] = None
+    field_number: Optional[str] = None
+    field_date: Optional[str] = None
+
+
+class GooseSyncBody(BaseModel):
+    # from GooseApp incrementale: "latest" (default) o date/time "yyyy-mm-dd hh:mm:ss"
+    from_: Optional[str] = Field(default="latest", alias="from")
+    # SOLO admin/anteprima: record simulati per testare il mapping senza API live
+    mock_records: Optional[List[dict]] = None
+
+    class Config:
+        populate_by_name = True
+
+
+async def _goose_config() -> dict:
+    doc = await db.goose_config.find_one({"id": "config"}, {"_id": 0}) or {}
+    cfg = dict(GOOSE_DEFAULT_CONFIG)
+    cfg.update({k: v for k, v in doc.items() if k in GOOSE_DEFAULT_CONFIG and v})
+    return cfg
+
+
+def _norm_piva(raw) -> str:
+    """Normalizza una Partita IVA per il confronto: solo alfanumerici, maiuscolo,
+    rimuove un eventuale prefisso paese 'IT'."""
+    s = re.sub(r"[^A-Za-z0-9]", "", str(raw or "")).upper()
+    if s.startswith("IT") and len(s) > 11:
+        s = s[2:]
+    return s
+
+
+def _parse_goose_date(raw) -> Optional[datetime]:
+    if not raw:
+        return None
+    s = str(raw).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s[:len(fmt) + 2], fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _match_site(cli: dict, site_ref: str) -> dict:
+    """Associa il codice sede dell'ordine GooseApp a una sede del cliente.
+    Fallback: sede principale."""
+    extra = cli.get("extra") or {}
+    ref = (site_ref or "").strip()
+    if ref:
+        for s in extra.get("sites", []):
+            if (s.get("goose_code") or "").strip() and s.get("goose_code").strip() == ref:
+                return {"site_id": s.get("id"), "site_nominativo": s.get("nominativo") or "",
+                        "site_indirizzo": s.get("indirizzo") or "", "matched": True}
+        # match sul codice della sede principale
+        if (extra.get("goose_code") or "").strip() == ref:
+            return {"site_id": "principal", "site_nominativo": extra.get("sede_nome") or "",
+                    "site_indirizzo": cli.get("indirizzo") or "", "matched": True}
+    # default: sede principale
+    return {"site_id": "principal", "site_nominativo": extra.get("sede_nome") or "",
+            "site_indirizzo": cli.get("indirizzo") or "", "matched": not ref}
+
+
+async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
+    """Associa ciascun ordine al cliente (per P.IVA) e alla sede, creando un
+    evento 'order' con source='gooseapp'. Salta i duplicati (goose_order_id)."""
+    if not cfg.get("field_piva"):
+        raise HTTPException(status_code=400, detail="Configurazione incompleta: manca il campo Partita IVA (field_piva).")
+
+    # Indice P.IVA -> cliente (solo clienti con P.IVA valorizzata)
+    piva_map = {}
+    async for c in db.clients.find({"deleted_at": None}, {"_id": 0}):
+        piva = _norm_piva((c.get("extra") or {}).get("partita_iva"))
+        if piva:
+            piva_map.setdefault(piva, c)
+
+    is_admin = actor.get("role") == "admin"
+    imported, skipped, unmatched, errors = 0, 0, [], []
+    details = []
+
+    for rec in records:
+        oid = str(rec.get(cfg["field_order_id"]) or "").strip()
+        piva = _norm_piva(rec.get(cfg["field_piva"]))
+        try:
+            if oid:
+                dup = await db.events.find_one({"goose_order_id": oid, "deleted_at": None})
+                if dup:
+                    skipped += 1
+                    continue
+            cli = piva_map.get(piva)
+            if not cli:
+                unmatched.append({"order_id": oid, "partita_iva": piva, "reason": "P.IVA non trovata in anagrafica"})
+                continue
+            # un agente importa solo gli ordini dei propri clienti
+            if not is_admin and cli.get("agent") != actor["username"]:
+                continue
+            site = _match_site(cli, str(rec.get(cfg.get("field_site") or "") or ""))
+            created = _parse_goose_date(rec.get(cfg.get("field_date") or "")) or now_utc()
+            company_name = str(rec.get(cfg.get("field_company") or "") or "").strip() or None
+            doc = {
+                "id": str(uuid.uuid4()),
+                "client_id": cli["id"],
+                "type": "order",
+                "company_id": None,
+                "company_name": company_name,
+                "note_text": (f"Documento {rec.get(cfg.get('field_number'))}" if cfg.get("field_number") and rec.get(cfg.get("field_number")) else None),
+                "reschedule_until": None,
+                "payment_mode": None,
+                "due_at": None,
+                "source": "gooseapp",
+                "goose_order_id": oid or None,
+                "collection_method": None,
+                "collection_ref_date": None,
+                "site_id": site["site_id"],
+                "site_nominativo": site["site_nominativo"],
+                "site_indirizzo": site["site_indirizzo"],
+                "agent": cli.get("agent"),
+                "created_at": created,
+                "deleted_at": None,
+            }
+            await db.events.insert_one(doc)
+            imported += 1
+            details.append({"order_id": oid, "client": cli.get("ragione_sociale"),
+                            "site": site["site_nominativo"] or "Sede principale",
+                            "site_matched": site["matched"]})
+        except Exception as e:  # noqa: BLE001
+            logger.error("Goose order %s errore: %s", oid, e)
+            errors.append({"order_id": oid, "error": str(e)})
+
+    summary = {
+        "total": len(records),
+        "imported": imported,
+        "skipped_duplicates": skipped,
+        "unmatched": unmatched,
+        "errors": errors,
+        "details": details,
+        "synced_at": iso(now_utc()),
+    }
+    await db.goose_config.update_one(
+        {"id": "config"},
+        {"$set": {"id": "config", "last_sync_at": now_utc(), "last_result": summary}},
+        upsert=True,
+    )
+    return summary
+
+
+@api.get("/goose/status")
+async def goose_status(user=Depends(get_current_user)):
+    doc = await db.goose_config.find_one({"id": "config"}, {"_id": 0}) or {}
+    cfg = await _goose_config()
+    return {
+        "configured": gooseapp.is_configured(),
+        "ready": bool(cfg.get("orders_table") and cfg.get("field_piva")),
+        "last_sync_at": iso(doc.get("last_sync_at")),
+        "last_result": doc.get("last_result"),
+    }
+
+
+@api.get("/goose/config")
+async def goose_get_config(user=Depends(require_admin)):
+    return await _goose_config()
+
+
+@api.put("/goose/config")
+async def goose_put_config(body: GooseConfigBody, user=Depends(require_admin)):
+    update = {k: v for k, v in body.dict(exclude_unset=True).items() if v is not None}
+    update["id"] = "config"
+    await db.goose_config.update_one({"id": "config"}, {"$set": update}, upsert=True)
+    return await _goose_config()
+
+
+@api.get("/goose/tables")
+async def goose_tables(structure: bool = False, user=Depends(require_admin)):
+    """Scoperta schema: elenco tabelle GooseApp (richiede IP in whitelist)."""
+    try:
+        return await gooseapp.list_tables(with_structure=structure)
+    except gooseapp.GooseError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@api.get("/goose/structure/{table}")
+async def goose_structure(table: str, user=Depends(require_admin)):
+    try:
+        return await gooseapp.get_structure(table)
+    except gooseapp.GooseError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@api.post("/goose/sync")
+async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_current_user)):
+    """Preleva gli ordini da GooseApp e li importa associandoli per P.IVA + sede.
+    Se `mock_records` è fornito (solo admin) salta la chiamata live: utile per
+    testare il mapping in anteprima senza IP in whitelist."""
+    cfg = await _goose_config()
+    if body.mock_records is not None:
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Solo admin può usare mock_records")
+        records = body.mock_records
+    else:
+        if not cfg.get("orders_table"):
+            raise HTTPException(status_code=400, detail="Configura prima la tabella Ordini (orders_table).")
+        try:
+            records = await gooseapp.select(cfg["orders_table"], from_=body.from_ or "latest")
+        except gooseapp.GooseError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+    return await _process_goose_orders(records, cfg, user)
+
+
 app.include_router(api)
+
 
 # CORS: elenco esplicito delle origini consentite (il wildcard "*" con
 # allow_credentials=True viene rifiutato dai browser). Copriamo il dominio

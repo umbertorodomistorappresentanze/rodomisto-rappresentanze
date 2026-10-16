@@ -129,6 +129,7 @@ export type Site = {
   zona: string;
   giro_id: string | null;
   position: number | null;
+  goose_code?: string;
 };
 export type Client = {
   id: string;
@@ -154,6 +155,7 @@ export type Client = {
   suspensions?: string[];
   partita_iva?: string;
   sede_nome?: string;
+  goose_code?: string;
   sites?: Site[];
   duplicates?: { id: string; ragione_sociale: string; citta: string; agent: string }[];
   // Campi presenti solo nelle righe-sede della lista Giro Visite:
@@ -241,3 +243,30 @@ export type RecurrenceClient = Client & {
 };
 export type RecurrenceGroup = { group: string; clients: RecurrenceClient[] };
 export type RecurrenceMembers = { company: string; period: string; groups: RecurrenceGroup[] };
+
+
+// --- GooseApp (sincronizzazione ordini) ---
+export type GooseSyncResult = {
+  total: number;
+  imported: number;
+  skipped_duplicates: number;
+  unmatched: { order_id: string; partita_iva: string; reason: string }[];
+  errors: { order_id: string; error: string }[];
+  details: { order_id: string; client: string; site: string; site_matched: boolean }[];
+  synced_at: string;
+};
+export type GooseStatus = {
+  configured: boolean;
+  ready: boolean;
+  last_sync_at: string | null;
+  last_result: GooseSyncResult | null;
+};
+export type GooseConfig = {
+  orders_table: string;
+  field_order_id: string;
+  field_piva: string;
+  field_site: string;
+  field_company: string;
+  field_number: string;
+  field_date: string;
+};

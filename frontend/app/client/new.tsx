@@ -30,6 +30,7 @@ export default function NewClient() {
     ragione_sociale: "",
     partita_iva: "",
     sede_nome: "",
+    goose_code: "",
     provincia: "",
     citta: "",
     zona: "",
@@ -54,6 +55,7 @@ export default function NewClient() {
         ragione_sociale: form.ragione_sociale.trim(),
         partita_iva: form.partita_iva.trim(),
         sede_nome: form.sede_nome.trim(),
+        goose_code: form.goose_code.trim(),
         provincia: normalizeProvincia(form.provincia),
         citta: form.citta.trim(),
         zona: form.zona.trim(),
@@ -143,6 +145,7 @@ export default function NewClient() {
 
         <LabeledInput label="Posizione nel giro" value={form.position} onChange={set("position")} keyboardType="number-pad" testID="f-position" />
         <LabeledInput label="Nominativo sede principale (opzionale)" value={form.sede_nome} onChange={set("sede_nome")} testID="f-sede-nome" />
+        <LabeledInput label="Codice GooseApp sede principale (opzionale)" value={form.goose_code} onChange={set("goose_code")} testID="f-goose-code" />
         <View>
           <AppText weight="medium" style={styles.label}>Provincia (sigla 2 lettere, es. CZ)</AppText>
           <TextInput

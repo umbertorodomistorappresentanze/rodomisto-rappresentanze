@@ -8,7 +8,7 @@ import { normalizeProvincia } from "@/src/utils/provincia";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 function emptySite(): Site {
-  return { nominativo: "", indirizzo: "", cap: "", citta: "", provincia: "", zona: "", giro_id: null, position: null };
+  return { nominativo: "", indirizzo: "", cap: "", citta: "", provincia: "", zona: "", giro_id: null, position: null, goose_code: "" };
 }
 
 export function SitesEditor({
@@ -114,6 +114,8 @@ export function SitesEditor({
                 style={styles.input}
               />
             </View>
+
+            <Field label="Codice GooseApp sede (opzionale)" value={s.goose_code ?? ""} onChange={(v) => update(i, { goose_code: v })} testID={`site-goose-${i}`} />
           </View>
         );
       })}

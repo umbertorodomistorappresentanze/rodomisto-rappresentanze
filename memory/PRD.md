@@ -1,5 +1,13 @@
 # AgendaVisite — PRD
 
+## Iter 37 (2026-10-16) — Integrazione GooseApp (sincronizzazione ordini)
+- Modulo backend frontend/api/gooseapp.py (client httpx: SELECT/TABLES/STRUCTURE, code+key da env GOOSEAPP_CODE/KEY, hint errore #111 IP whitelist). Endpoint: /api/goose/status, /api/goose/config (admin GET/PUT), /api/goose/tables + /structure (admin), /api/goose/sync (import; accetta mock_records solo admin per test senza API live).
+- Import: match cliente per PARTITA IVA normalizzata; match sede per codice GooseApp (Site.goose_code o extra.goose_code principale) con fallback sede principale; crea evento order source=gooseapp con goose_order_id (dedup), company_name=mandante, sede. Agente importa solo i propri clienti, admin tutti.
+- Campo "Codice GooseApp" su sede principale (new/edit cliente) e sedi aggiuntive (SitesEditor). Schermata app/goose-sync.tsx + pulsante in dashboard (goose-sync-entry).
+- VINCOLO: chiamate live GooseApp funzionano SOLO su Render dopo aver messo gli IP statici in uscita di Render nella whitelist GooseApp (altrimenti #111). In anteprima si testa solo via mock_records.
+- Testing iter20: backend 10/10 + frontend 11/11 PASS per umberto(admin)/andrea(agente). Nessun bug.
+
+
 ## Iter 36 (2026-10-15) — Sedi di Scarico multiple + Posizione nel Giro
 - Ogni cliente: sede principale (dati anagrafici + extra.sede_nome) + sedi aggiuntive extra.sites[]={id,nominativo,indirizzo,cap,citta,provincia,zona,giro_id,position}. Ogni sede ha Giro e Posizione nel giro indipendenti.
 - Lista Giro Visite: ogni sede (principale/aggiuntiva) appartenente al giro = RIGA SEPARATA (client-row con row_id univoco client_id:site_id), ordinata per Posizione nel giro poi ragione sociale. Mostra Ragione Sociale + Nominativo/Indirizzo sede.
