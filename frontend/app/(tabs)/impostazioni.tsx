@@ -1,7 +1,7 @@
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Bell, CaretRight, FileXls, SignOut, Storefront, UserCircle } from "phosphor-react-native";
+import { Bell, CaretRight, FileXls, Gear, SignOut, Storefront, UserCircle } from "phosphor-react-native";
 
 import { useAuth } from "@/src/auth";
 import { AppText } from "@/src/components/ui";
@@ -50,6 +50,14 @@ export default function Impostazioni() {
             label="Gestisci aziende"
             onPress={() => router.push("/companies")}
             testID="menu-companies"
+          />
+        ) : null}
+        {isAdmin ? (
+          <MenuItem
+            icon={<Gear size={22} color={colors.brand} weight="fill" />}
+            label="Configurazione GooseApp"
+            onPress={() => router.push("/goose-sync")}
+            testID="menu-goose"
           />
         ) : null}
         <MenuItem
