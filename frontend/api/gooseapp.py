@@ -32,15 +32,37 @@ ERROR_HINTS = {
 
 
 class GooseError(Exception):
-    def __init__(self, code, description):
+    def __init__(self, code, description, extra=None):
         self.code = code
         self.description = description
-        hint = ERROR_HINTS.get(code)
-        super().__init__(hint or f"GooseApp error #{code}: {description}")
+        if code == 111:
+            ip = extra or "sconosciuto"
+            msg = (f"Errore #111: IP non autorizzato per la richiesta proveniente da {ip}. "
+                   f"Aggiungi questo IP alla whitelist in GooseApp → GESTISCI → API → IP di connessione.")
+        else:
+            hint = ERROR_HINTS.get(code)
+            msg = hint or f"GooseApp error #{code}: {description}"
+        super().__init__(msg)
 
 
 def is_configured() -> bool:
     return bool(GOOSE_CODE and GOOSE_KEY)
+
+
+async def _outbound_ip() -> str:
+    """Rileva l'IP pubblico in uscita della richiesta (per diagnosticare il #111).
+    Usa servizi di echo IP; se tutti falliscono ritorna 'sconosciuto'."""
+    services = ("https://api.ipify.org", "https://ifconfig.me/ip", "https://checkip.amazonaws.com")
+    for url in services:
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(url)
+                ip = (resp.text or "").strip()
+                if ip:
+                    return ip
+        except httpx.HTTPError:
+            continue
+    return "sconosciuto"
 
 
 async def _call(service: str, payload: dict) -> dict:
@@ -62,7 +84,11 @@ async def _call(service: str, payload: dict) -> dict:
     if data.get("status") == "OK":
         return data.get("result", {})
     err = data.get("error") or {}
-    raise GooseError(err.get("code"), err.get("description") or "Errore sconosciuto")
+    code = err.get("code")
+    if code == 111:
+        ip = await _outbound_ip()
+        raise GooseError(111, err.get("description"), extra=ip)
+    raise GooseError(code, err.get("description") or "Errore sconosciuto")
 
 
 async def select(table: str, from_: str = None, fields: str = None, filter_: dict = None) -> list:

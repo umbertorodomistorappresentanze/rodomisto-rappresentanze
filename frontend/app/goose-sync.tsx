@@ -28,6 +28,7 @@ export default function GooseSyncScreen() {
   });
 
   const [busy, setBusy] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [cfg, setCfg] = useState<Partial<GooseConfig> | null>(null);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -36,12 +37,15 @@ export default function GooseSyncScreen() {
 
   async function sync() {
     setBusy(true);
+    setLastError(null);
     try {
       const res = await apiPost<GooseStatus["last_result"]>("/goose/sync", {});
       toast(`Importati ${res?.imported ?? 0} ordini`, "success");
       statusQuery.refetch();
     } catch (e: any) {
-      toast(e?.detail || "Sincronizzazione non riuscita", "error");
+      const msg = e?.detail || "Sincronizzazione non riuscita";
+      setLastError(msg);
+      toast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -63,12 +67,15 @@ export default function GooseSyncScreen() {
 
   async function discoverTables() {
     setBusy(true);
+    setLastError(null);
     try {
       const res = await apiGet<any>("/goose/tables");
       const names = Array.isArray(res?.data) ? res.data : res;
       toast(`Tabelle: ${JSON.stringify(names).slice(0, 120)}`, "success");
     } catch (e: any) {
-      toast(e?.detail || "Scoperta non riuscita", "error");
+      const msg = e?.detail || "Scoperta non riuscita";
+      setLastError(msg);
+      toast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -125,6 +132,16 @@ export default function GooseSyncScreen() {
           <ArrowsClockwise size={20} color={colors.onBrand} weight="bold" />
           <AppText weight="bold" style={styles.syncText}>{busy ? "Sincronizzazione…" : "Sincronizza ora"}</AppText>
         </Pressable>
+
+        {lastError ? (
+          <View testID="goose-error" style={styles.errorCard}>
+            <View style={styles.errorHead}>
+              <Warning size={18} color={colors.error} weight="fill" />
+              <AppText weight="bold" style={styles.errorTitle}>Errore di sincronizzazione</AppText>
+            </View>
+            <AppText selectable style={styles.errorMsg}>{lastError}</AppText>
+          </View>
+        ) : null}
 
         {/* Esito ultima sincronizzazione */}
         {last ? (
@@ -201,6 +218,10 @@ const useStyles = makeStyles((c) => ({
   lastSync: { fontSize: 12, color: c.muted, marginTop: spacing.xs },
   syncBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: c.brand, borderRadius: radius.md, minHeight: 52 },
   syncText: { fontSize: 16, color: c.onBrand },
+  errorCard: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.error, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  errorHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  errorTitle: { fontSize: 14, color: c.error },
+  errorMsg: { fontSize: 13, color: c.onSurface, lineHeight: 19 },
   resRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   resLabel: { fontSize: 14, color: c.onSurfaceTertiary },
   resVal: { fontSize: 16, color: c.onSurface },
