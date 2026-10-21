@@ -96,3 +96,5 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+!frontend/api/data/*.xlsx

@@ -52,12 +52,13 @@ PAYMENT_MODES = {
     "contrassegno": {"label": "Contrassegno", "days": None},
     "bonifico_30": {"label": "Bonifico bancario 30 giorni", "days": 30},
     "bonifico_60": {"label": "Bonifico bancario 60 giorni", "days": 60},
+    "bonifico_vista_fattura": {"label": "Bonifico bancario vista fattura", "days": 15},
     "agente_30": {"label": "Pagamento mezzo Agente 30 giorni", "days": 30},
     "agente_60": {"label": "Pagamento mezzo Agente 60 giorni", "days": 60},
     "agente_90": {"label": "Pagamento mezzo Agente 90 giorni", "days": 90},
     "rifatturazione_pac": {"label": "Rifatturazione Pac", "days": None},
 }
-PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "agente_30", "agente_60", "agente_90", "rifatturazione_pac"]
+PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "bonifico_vista_fattura", "agente_30", "agente_60", "agente_90", "rifatturazione_pac"]
 
 app = FastAPI(title="Rodomisto Rappresentanze API")
 api = APIRouter(prefix="/api")
@@ -505,6 +506,135 @@ async def seed():
                     len(docs), assigned, len(docs) - assigned, deleted, len(seed_data.EXTRA_CLIENTS))
 
     await seed_recurrences()
+    await import_clients_ott26()
+
+
+async def import_clients_ott26():
+    """Import idempotente (una tantum) dell'anagrafica 'clienti menu e pellegrini
+    ott 26'. Match su P.IVA (poi codice azienda / ragione sociale): i clienti
+    esistenti vengono aggiornati (agente, P.IVA, CF, contatti mancanti), i nuovi
+    inseriti. Il giro è ricavato da 'Descrizione Zona' tra i giri dell'agente;
+    se non univoco il cliente finisce in 'Da verificare'."""
+    key = "import_clienti_menu_pellegrini_ott26_v1"
+    if await db.app_meta.find_one({"key": key}):
+        return
+    path = seed_data.DATA_DIR / "clienti_menu_pellegrini_ott26.xlsx"
+    if not path.exists():
+        return
+    import openpyxl
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    rows = list(wb.worksheets[0].iter_rows(values_only=True))
+    header = [seed_data._norm(h) if h is not None else "" for h in rows[0]]
+    idx = {h: i for i, h in enumerate(header)}
+
+    def cell(row, col):
+        i = idx.get(col)
+        v = row[i] if i is not None and i < len(row) else None
+        if v is None:
+            return ""
+        if isinstance(v, float) and v.is_integer():
+            v = int(v)
+        return seed_data._norm(str(v))
+
+    giri = await db.giri.find({"active": {"$ne": False}}, {"_id": 0}).to_list(1000)
+
+    def resolve(agent, zona):
+        k = seed_data._key(zona)
+        if not k:
+            return None, None
+        mine = [g for g in giri if (g.get("agent") or "umberto") == agent]
+        hits = []
+        for g in mine:
+            for pos, loc in enumerate(g.get("localities") or []):
+                if seed_data._key(loc).replace("'", "") == k.replace("'", ""):
+                    hits.append((g["id"], pos))
+        if len({h[0] for h in hits}) == 1:
+            return hits[0]
+        if not hits:
+            named = [g for g in mine if seed_data._key(g["name"]) == k]
+            if len(named) == 1:
+                return named[0]["id"], 999
+        return None, None
+
+    existing = await db.clients.find({"deleted_at": None}, {"_id": 0}).to_list(20000)
+    by_piva = {_norm_piva((c.get("extra") or {}).get("partita_iva")): c for c in existing
+               if _norm_piva((c.get("extra") or {}).get("partita_iva"))}
+    by_code = {c.get("codice_azienda"): c for c in existing if c.get("codice_azienda")}
+    by_name = {seed_data._key(c.get("ragione_sociale")): c for c in existing}
+
+    inserted = updated = review = 0
+    for row in rows[1:]:
+        ragione = cell(row, "Ragione Sociale")
+        if not ragione:
+            continue
+        agent = seed_data.AGENT_MAP.get(seed_data._key(cell(row, "Nominativo Agente")))
+        if not agent:
+            continue
+        zona = cell(row, "Descrizione Zona")
+        piva, cf = cell(row, "Partita IVA"), cell(row, "Codice Fiscale")
+        tel = cell(row, "Telefono") or cell(row, "Telefono Cellulare") or cell(row, "Telefono Ufficio")
+        giro_id, pos = resolve(agent, zona)
+        cur = by_piva.get(_norm_piva(piva)) or by_code.get(cell(row, "Codice Azienda")) \
+            or by_name.get(seed_data._key(ragione))
+        if cur:
+            upd = {"agent": agent}
+            if piva:
+                upd["extra.partita_iva"] = piva
+            if cf:
+                upd["extra.codice_fiscale"] = cf
+            for f, v in (("indirizzo", cell(row, "Indirizzo")), ("cap", cell(row, "CAP")),
+                         ("citta", cell(row, "Città")), ("provincia", cell(row, "Provincia")),
+                         ("zona", zona), ("telefono", tel), ("email", cell(row, "Email")),
+                         ("codice_azienda", cell(row, "Codice Azienda"))):
+                if v and not cur.get(f):
+                    upd[f] = v
+            cur_giro = next((g for g in giri if g["id"] == cur.get("giro_id")), None)
+            if not cur_giro or (cur_giro.get("agent") or "umberto") != agent:
+                upd["giro_id"] = giro_id
+                upd["position"] = pos if pos is not None else 999
+                if not giro_id:
+                    review += 1
+            await db.clients.update_one({"id": cur["id"]}, {"$set": upd})
+            updated += 1
+            continue
+        if not giro_id:
+            review += 1
+        await db.clients.insert_one({
+            "id": str(uuid.uuid4()),
+            "ragione_sociale": ragione,
+            "codice_azienda": cell(row, "Codice Azienda"),
+            "provincia": cell(row, "Provincia"),
+            "giro_id": giro_id,
+            "position": pos if pos is not None else 999,
+            "citta": cell(row, "Città"),
+            "zona": zona,
+            "indirizzo": cell(row, "Indirizzo"),
+            "cap": cell(row, "CAP"),
+            "telefono": tel,
+            "email": cell(row, "Email"),
+            "agent": agent,
+            "permanent_note": "",
+            "last_visit_at": None,
+            "snoozed_until": None,
+            "extra": {
+                "partita_iva": piva, "codice_fiscale": cf,
+                "telefono_ufficio": cell(row, "Telefono Ufficio"),
+                "telefono_cellulare": cell(row, "Telefono Cellulare"),
+                "email_pec": cell(row, "Email PEC"),
+                "sito_web": cell(row, "Sito Web"),
+                "categoria": cell(row, "Descrizione Cat. Commerciali"),
+                "pagamento": cell(row, "Descrizione Mod. di Pagamento"),
+                "note_interne": cell(row, "Note Interne"),
+                "codice_sdi": cell(row, "Codice SDI"),
+            },
+            "created_by": agent,
+            "deleted_at": None,
+            "created_at": now_utc(),
+        })
+        inserted += 1
+    await db.app_meta.insert_one({"key": key, "at": now_utc(), "inserted": inserted,
+                                  "updated": updated, "da_verificare": review})
+    logger.info("Import clienti ott26: %d nuovi, %d aggiornati, %d da verificare", inserted, updated, review)
 
 
 def _norm(s) -> str:
@@ -1418,7 +1548,11 @@ async def list_activities(
     for e in events:
         cli = cmap.get(e["client_id"], {})
         giro_name = gmap.get(cli.get("giro_id")) if cli else None
-        if e["type"] in ("order", "collection", "suspension"):
+        type_label = ACTIVITY_TYPE_LABELS.get(e["type"], e["type"])
+        if e["type"] == "order" and e.get("company_name"):
+            type_label = f"Ordine effettuato per {e['company_name']}"
+            context = f"Ordine N. {e.get('order_number')}" if e.get("order_number") else ""
+        elif e["type"] in ("order", "collection", "suspension"):
             if e.get("order_number"):
                 context = f"Ordine N. {e.get('order_number')}"
             else:
@@ -1431,7 +1565,7 @@ async def list_activities(
         out.append({
             "id": e["id"],
             "type": e["type"],
-            "type_label": ACTIVITY_TYPE_LABELS.get(e["type"], e["type"]),
+            "type_label": type_label,
             "created_at": iso(e.get("created_at")),
             "agent": e.get("agent"),
             "client_id": e.get("client_id"),
@@ -2065,6 +2199,14 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
         if piva:
             piva_map.setdefault(piva, c)
 
+    # Mandanti: il valore GooseApp (IDMAN/azienda) viene ricondotto al nome
+    # dell'azienda in anagrafica quando coincide (match normalizzato).
+    comp_map = {}
+    async for c in db.companies.find({}, {"_id": 0}):
+        comp_map[_norm(c["name"])] = c
+        if c.get("goose_code"):
+            comp_map[_norm(c["goose_code"])] = c
+
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
     details = []
@@ -2088,12 +2230,17 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
             site = _match_site(cli, str(rec.get(cfg.get("field_site") or "") or ""))
             created = _parse_goose_date(rec.get(cfg.get("field_date") or "")) or now_utc()
             company_name = str(rec.get(cfg.get("field_company") or "") or "").strip() or None
+            company_id = None
+            if company_name:
+                comp = comp_map.get(_norm(company_name))
+                if comp:
+                    company_id, company_name = comp["id"], comp["name"]
             order_number = _clean_doc_number(rec.get(cfg.get("field_number"))) if cfg.get("field_number") else ""
             doc = {
                 "id": str(uuid.uuid4()),
                 "client_id": cli["id"],
                 "type": "order",
-                "company_id": None,
+                "company_id": company_id,
                 "company_name": company_name,
                 "note_text": None,
                 "order_number": order_number or None,
