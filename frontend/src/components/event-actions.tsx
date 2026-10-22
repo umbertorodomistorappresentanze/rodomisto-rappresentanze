@@ -69,7 +69,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
     let payload: any = null;
     if (isOrder) {
       if (!mode) return;
-      payload = { payment_mode: mode };
+      payload = { payment_mode: mode, activity_date: toISODate(colDate) };
     } else if (isCollection) {
       payload = {
         activity_date: toISODate(colDate),
@@ -82,7 +82,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
     try {
       await apiPut(`/events/${event.id}`, payload);
       setEditOpen(false);
-      toast(isCollection ? "Incasso aggiornato" : "Termini aggiornati", "success");
+      toast(isCollection ? "Incasso aggiornato" : "Ordine aggiornato: scadenza ricalcolata", "success");
       invalidate();
     } catch (e: any) {
       toast(e?.detail || "Operazione non riuscita", "error");
@@ -136,7 +136,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <AppText weight="bold" style={styles.sheetTitle}>
-                {isCollection ? "Modifica incasso" : "Modifica termini di pagamento"}
+                {isCollection ? "Modifica incasso" : "Modifica data e termini di pagamento"}
               </AppText>
               <Pressable testID="ev-edit-close" onPress={() => setEditOpen(false)} hitSlop={8} style={styles.closeBtn}>
                 <X size={20} color={colors.onSurfaceSecondary} weight="bold" />
@@ -147,6 +147,9 @@ export function EventActions({ event }: { event: VisitEvent }) {
             ) : null}
             <ScrollView contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.sm }} showsVerticalScrollIndicator={false}>
               {isOrder ? (
+                <>
+                <ActivityDateField value={colDate} onChange={setColDate} label="Data ordine" />
+                <AppText weight="medium" style={styles.sheetSub}>Termini di pagamento</AppText>
                 <View style={styles.chips}>
                   {(pmQuery.data ?? []).map((pm) => {
                     const on = mode === pm.key;
@@ -162,6 +165,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
                     );
                   })}
                 </View>
+                </>
               ) : (
                 <>
                   <ActivityDateField value={colDate} onChange={setColDate} label="Data dell'incasso" />

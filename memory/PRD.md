@@ -323,3 +323,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Import una tantum (startup, flag `app_meta.import_clienti_menu_pellegrini_ott26_v1`) da `frontend/api/data/clienti_menu_pellegrini_ott26.xlsx`: match P.IVA → codice → nome; agente da "Nominativo Agente"; giro da "Descrizione Zona" sui giri dell'agente, altrimenti "Da verificare". P.IVA e CF salvati in `extra`.
 - Attività ordine: "Ordine effettuato per {mandante}" (GooseApp: campo azienda/IDMAN ricondotto al nome azienda se coincide o se `goose_code` azienda).
 - Nuova modalità pagamento `bonifico_vista_fattura` (sospeso a 15 giorni dalla data ordine).
+- Picker aziende (Ordine/Incassato/Sospeso): ricerca "Cerca azienda..." + scroll interno. Modifica ordine: campo "Data ordine" con ricalcolo scadenza sospeso.

@@ -10,6 +10,7 @@ import {
   CaretLeft,
   CaretUp,
   CurrencyEur,
+  MagnifyingGlass,
   NotePencil,
   Storefront,
   Trash,
@@ -58,6 +59,7 @@ export const QuickActionsSheet = forwardRef<
   const [orderPaymentMode, setOrderPaymentMode] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [activityDate, setActivityDate] = useState<Date>(new Date());
+  const [companyQuery, setCompanyQuery] = useState("");
   const insets = useSafeAreaInsets();
 
   const pendingQuery = useQuery({
@@ -76,6 +78,7 @@ export const QuickActionsSheet = forwardRef<
       setOrderPaymentMode(null);
       setPayOpen(false);
       setActivityDate(new Date());
+      setCompanyQuery("");
       modalRef.current?.present();
     },
     dismiss: () => modalRef.current?.dismiss(),
@@ -119,6 +122,39 @@ export const QuickActionsSheet = forwardRef<
   }
 
   const styles = makeSheetStyles(colors);
+
+  const normQ = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const filteredCompanies = companyQuery.trim()
+    ? companies.filter((co) => normQ(co.name).includes(normQ(companyQuery)))
+    : companies;
+
+  function renderCompanySearch() {
+    return (
+      <View style={styles.searchRow}>
+        <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
+        <TextInput
+          testID="company-search"
+          value={companyQuery}
+          onChangeText={setCompanyQuery}
+          placeholder="Cerca azienda..."
+          placeholderTextColor={colors.muted}
+          autoCorrect={false}
+          style={styles.searchInput}
+        />
+        {companyQuery ? (
+          <Pressable testID="company-search-clear" onPress={() => setCompanyQuery("")} hitSlop={8}>
+            <X size={16} color={colors.muted} weight="bold" />
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
+
+  function renderNoCompanies() {
+    return filteredCompanies.length === 0 ? (
+      <AppText style={styles.hint}>Nessuna azienda trovata per &quot;{companyQuery}&quot;</AppText>
+    ) : null;
+  }
 
   function Header({ title }: { title: string }) {
     return (
@@ -228,7 +264,7 @@ export const QuickActionsSheet = forwardRef<
               label="Ordine effettuato"
               color={colors.brandPrimary}
               bg={colors.brandSecondary}
-              onPress={() => { setOrderCompany(null); setMode("order"); }}
+              onPress={() => { setOrderCompany(null); setCompanyQuery(""); setMode("order"); }}
             />
             <ActionTile
               testID="action-incassato"
@@ -236,7 +272,7 @@ export const QuickActionsSheet = forwardRef<
               label="Incassato"
               color={colors.success}
               bg={colors.brandSecondary}
-              onPress={() => setMode("collection")}
+              onPress={() => { setCompanyQuery(""); setMode("collection"); }}
             />
             <ActionTile
               testID="action-sospeso"
@@ -244,7 +280,7 @@ export const QuickActionsSheet = forwardRef<
               label="+ Sospeso"
               color={colors.error}
               bg={colors.surfaceTertiary}
-              onPress={() => setMode("suspension")}
+              onPress={() => { setCompanyQuery(""); setMode("suspension"); }}
             />
             <ActionTile
               testID="action-rimandata"
@@ -300,13 +336,16 @@ export const QuickActionsSheet = forwardRef<
           </View>
         ) : null}
 
+        {(mode === "order" && !orderCompany) || mode === "collection" || mode === "suspension" ? renderCompanySearch() : null}
+
         {mode === "order" ? (
-          <View style={{ flex: 1 }}>
-            <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.lg, gap: spacing.sm }} showsVerticalScrollIndicator>
+          <View style={{ flex: 1, minHeight: 0 }}>
+            <BottomSheetScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.lg, gap: spacing.sm }} showsVerticalScrollIndicator>
               {!orderCompany ? (
                 <>
                   <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
-                  {companies.map((co) => (
+                  {renderNoCompanies()}
+                  {filteredCompanies.map((co) => (
                     <Pressable
                       key={co.id}
                       testID={`order-company-${co.id}`}
@@ -383,10 +422,11 @@ export const QuickActionsSheet = forwardRef<
         ) : null}
 
         {mode === "collection" ? (
-          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
+          <BottomSheetScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
             <ActivityDateField value={activityDate} onChange={setActivityDate} />
             <AppText style={styles.hint}>Azienda di cui registrare l&apos;incasso (chiude il sospeso)</AppText>
-            {companies.map((co) => (
+            {renderNoCompanies()}
+            {filteredCompanies.map((co) => (
               <Pressable
                 key={co.id}
                 testID={`collection-company-${co.id}`}
@@ -402,10 +442,11 @@ export const QuickActionsSheet = forwardRef<
         ) : null}
 
         {mode === "suspension" ? (
-          <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
+          <BottomSheetScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.xl * 2, gap: spacing.sm }} showsVerticalScrollIndicator>
             <ActivityDateField value={activityDate} onChange={setActivityDate} />
             <AppText style={styles.hint}>Azienda del sospeso da segnare come attivo</AppText>
-            {companies.map((co) => (
+            {renderNoCompanies()}
+            {filteredCompanies.map((co) => (
               <Pressable
                 key={co.id}
                 testID={`suspension-company-${co.id}`}
@@ -498,7 +539,13 @@ export const QuickActionsSheet = forwardRef<
 
 function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
   return StyleSheet.create({
-    container: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+    container: { flex: 1, minHeight: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+    searchRow: {
+      flexDirection: "row", alignItems: "center", gap: spacing.sm,
+      backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,
+      borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 46, marginBottom: spacing.sm,
+    },
+    searchInput: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: c.onSurface, paddingVertical: 0 },
     header: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingBottom: spacing.lg },
     title: { fontSize: 20, color: c.onSurface },
     subtitle: { fontSize: 13, color: c.muted, marginTop: 2 },
