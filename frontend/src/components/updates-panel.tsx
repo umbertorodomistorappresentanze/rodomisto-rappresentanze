@@ -48,8 +48,8 @@ export function ActivityRow({ item, showAgent }: { item: Activity; showAgent?: b
         <View style={[styles.dot, { backgroundColor: dotColor }]} />
         <View style={{ flex: 1 }}>
           <AppText weight="semibold" style={styles.typeLabel} numberOfLines={1}>{item.type_label}</AppText>
-          <AppText style={styles.detail} numberOfLines={1}>
-            {item.client_ragione_sociale}{item.context ? ` · ${item.context}` : ""}
+          <AppText style={styles.detail} numberOfLines={2}>
+            {item.client_ragione_sociale}{item.site_label ? ` (Sede: ${item.site_label})` : ""}{item.context ? ` · ${item.context}` : ""}
           </AppText>
         </View>
         {showAgent && item.agent ? (
@@ -105,7 +105,7 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
             <AppText weight="semibold" style={styles.lastDate}>{longDate(last.created_at)}</AppText>
             <AppText style={styles.lastActivityLabel}>Ultima attività:</AppText>
             <AppText weight="semibold" style={styles.lastActivity} numberOfLines={2}>
-              {last.type_label} – {last.client_ragione_sociale}{last.context ? ` – ${last.context}` : ""}
+              {last.type_label} – {last.client_ragione_sociale}{last.site_label ? ` (Sede: ${last.site_label})` : ""}{last.context ? ` – ${last.context}` : ""}
             </AppText>
           </>
         ) : (

@@ -9,6 +9,7 @@ import { apiGet, apiPost, apiPut, GooseConfig, GooseFieldsResp, GooseStatus, Goo
 import { useAuth } from "@/src/auth";
 import { AppText, Button, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
+import { GooseMandanti } from "@/src/components/goose-mandanti";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 const ASSIGN_LABELS: Record<string, string> = {
@@ -18,9 +19,10 @@ const ASSIGN_LABELS: Record<string, string> = {
   field_number: "N. documento",
   field_date: "Data ordine",
   field_order_id: "ID ordine",
+  field_ship: "Indirizzo spedizione",
 };
 const ASSIGN_KEYS: (keyof import("@/src/api").GooseConfig)[] = [
-  "field_piva", "field_site", "field_company", "field_number", "field_date", "field_order_id",
+  "field_piva", "field_site", "field_company", "field_number", "field_date", "field_order_id", "field_ship",
 ];
 
 export default function GooseSyncScreen() {
@@ -289,11 +291,16 @@ export default function GooseSyncScreen() {
                 <CfgField label="Campo numero documento" value={config.field_number ?? ""} onChange={setField("field_number")} />
                 <CfgField label="Campo data ordine" value={config.field_date ?? ""} onChange={setField("field_date")} />
                 <CfgField label="Campo ID ordine" value={config.field_order_id ?? ""} onChange={setField("field_order_id")} />
+                <CfgField label="Campo/i indirizzo spedizione / sede di scarico (separati da virgola)" value={config.field_ship ?? ""} onChange={setField("field_ship")} />
+                <CfgField label="Tabella destinazioni (opzionale, se il campo spedizione è un ID)" value={config.dest_table ?? ""} onChange={setField("dest_table")} />
+                <CfgField label="Tabella mandanti (opzionale, rilevata in automatico)" value={config.mandanti_table ?? ""} onChange={setField("mandanti_table")} />
                 <Button title="Salva configurazione" onPress={saveConfig} testID="goose-config-save" />
               </View>
             ) : null}
           </View>
         ) : null}
+
+        {isAdmin ? <GooseMandanti /> : null}
       </ScrollView>
     </View>
   );

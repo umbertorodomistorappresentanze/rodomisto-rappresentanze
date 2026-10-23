@@ -180,6 +180,7 @@ export type Activity = {
   payment_mode?: string | null;
   site_nominativo?: string | null;
   order_number?: string | null;
+  site_label?: string | null;
 };
 
 export type VisitEvent = {
@@ -203,6 +204,7 @@ export type VisitEvent = {
   site_nominativo?: string | null;
   site_indirizzo?: string | null;
   order_number?: string | null;
+  ship_label?: string | null;
   source?: string | null;
 };
 
@@ -272,6 +274,23 @@ export type GooseConfig = {
   field_company: string;
   field_number: string;
   field_date: string;
+  field_ship: string;
+  dest_table: string;
+  mandanti_table: string;
+};
+export type GooseMandante = {
+  code: string;
+  orders: number;
+  goose_name: string | null;
+  company_id: string | null;
+  company_name: string | null;
+};
+export type GooseAutoResult = {
+  table: string | null;
+  candidates: string[];
+  mapped: { code: string; goose_name: string | null; company: string | null }[];
+  named_only: { code: string; goose_name: string | null; company: string | null }[];
+  unresolved: string[];
 };
 export type GooseTablesResp = { tables: { name: string; description: string }[]; raw: any };
 export type GooseFieldsResp = { fields: { name: string; type: string }[]; raw: any };

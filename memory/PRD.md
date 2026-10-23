@@ -324,3 +324,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Attività ordine: "Ordine effettuato per {mandante}" (GooseApp: campo azienda/IDMAN ricondotto al nome azienda se coincide o se `goose_code` azienda).
 - Nuova modalità pagamento `bonifico_vista_fattura` (sospeso a 15 giorni dalla data ordine).
 - Picker aziende (Ordine/Incassato/Sospeso): ricerca "Cerca azienda..." + scroll interno. Modifica ordine: campo "Data ordine" con ricalcolo scadenza sospeso.
+- GooseApp: tabella conversione IDMAN→azienda (goose_mandanti, UI in /goose-sync, auto-rilevamento tabella 'MAN'); sede spedizione (field_ship/dest_table) → ship_label mostrata come '(Sede: X)'.

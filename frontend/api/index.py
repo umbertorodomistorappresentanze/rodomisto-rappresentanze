@@ -414,6 +414,7 @@ def event_public(doc: dict) -> dict:
         "site_nominativo": doc.get("site_nominativo"),
         "site_indirizzo": doc.get("site_indirizzo"),
         "order_number": doc.get("order_number"),
+        "ship_label": doc.get("ship_label"),
         "source": doc.get("source"),
     }
 
@@ -1559,9 +1560,7 @@ async def list_activities(
                 context = e.get("company_name") or ""
         else:
             context = giro_name or (cli.get("citta") if cli else "") or ""
-        site_nom = e.get("site_nominativo")
-        if site_nom:
-            context = f"{context} · {site_nom}" if context else site_nom
+        site_label = e.get("ship_label") or e.get("site_nominativo") or None
         out.append({
             "id": e["id"],
             "type": e["type"],
@@ -1577,6 +1576,7 @@ async def list_activities(
             "payment_mode": e.get("payment_mode"),
             "site_nominativo": e.get("site_nominativo"),
             "order_number": e.get("order_number"),
+            "site_label": site_label,
         })
     return out
 
@@ -2103,6 +2103,9 @@ GOOSE_DEFAULT_CONFIG = {
     "field_company": "",      # campo con il mandante/azienda
     "field_number": "",       # numero documento
     "field_date": "",         # data ordine (yyyy-mm-dd ...)
+    "field_ship": "",         # campo/i indirizzo di spedizione o destinazione (separati da virgola)
+    "dest_table": "",         # tabella destinazioni (se field_ship contiene un ID)
+    "mandanti_table": "",     # tabella mandanti GooseApp (RECORD_ID = IDMAN)
 }
 
 
@@ -2114,6 +2117,14 @@ class GooseConfigBody(BaseModel):
     field_company: Optional[str] = None
     field_number: Optional[str] = None
     field_date: Optional[str] = None
+    field_ship: Optional[str] = None
+    dest_table: Optional[str] = None
+    mandanti_table: Optional[str] = None
+
+
+class GooseMandanteBody(BaseModel):
+    code: str
+    company_id: Optional[str] = None
 
 
 class GooseSyncBody(BaseModel):
@@ -2176,14 +2187,69 @@ def _match_site(cli: dict, site_ref: str) -> dict:
         for s in extra.get("sites", []):
             if (s.get("goose_code") or "").strip() and s.get("goose_code").strip() == ref:
                 return {"site_id": s.get("id"), "site_nominativo": s.get("nominativo") or "",
-                        "site_indirizzo": s.get("indirizzo") or "", "matched": True}
+                        "site_indirizzo": s.get("indirizzo") or "", "matched": True, "by_code": True}
         # match sul codice della sede principale
         if (extra.get("goose_code") or "").strip() == ref:
             return {"site_id": "principal", "site_nominativo": extra.get("sede_nome") or "",
-                    "site_indirizzo": cli.get("indirizzo") or "", "matched": True}
+                    "site_indirizzo": cli.get("indirizzo") or "", "matched": True, "by_code": True}
     # default: sede principale
     return {"site_id": "principal", "site_nominativo": extra.get("sede_nome") or "",
             "site_indirizzo": cli.get("indirizzo") or "", "matched": not ref}
+
+
+_NAME_KEYS = ("RAGSO", "RAGIONE", "DENOM", "NOME", "DESCR", "DES", "NOM", "RAG")
+_CITY_KEYS = ("LOCALITA", "CITTA", "COMUNE", "LOC", "CIT", "COM")
+
+
+def _record_text(rec: dict, prefs) -> str:
+    """Primo valore testuale (non numerico/ID) di un record GooseApp il cui nome
+    campo contiene una delle chiavi preferite (in ordine di priorità)."""
+    items = [(str(k).upper(), v) for k, v in (rec or {}).items()]
+    for pref in prefs:
+        for k, v in items:
+            if k.startswith("ID") or k == "RECORD_ID" or pref not in k:
+                continue
+            t = str(v or "").strip()
+            if t and not re.fullmatch(r"[\d\-./ ]+", t):
+                return t
+    return ""
+
+
+def _match_company(name: str, companies: list):
+    """Azienda in anagrafica il cui nome compare (a parole intere) nel testo."""
+    n = f" {_norm(name)} "
+    best = None
+    for c in companies:
+        cn = _norm(c.get("name"))
+        if cn and (f" {cn} " in n or n.strip() == cn):
+            if not best or len(cn) > len(_norm(best["name"])):
+                best = c
+    return best
+
+
+def _ship_label(text: str) -> str:
+    """Dal testo dell'indirizzo di spedizione ricava una dicitura breve: la
+    città (dopo il CAP) se presente, altrimenti la prima riga/denominazione."""
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not t:
+        return ""
+    m = re.search(r"\b\d{5}\s+([A-Za-zÀ-ÿ' .]+?)\s*(?:\(|,|-|$)", t)
+    if m and m.group(1).strip():
+        return m.group(1).strip().title()
+    t = re.sub(r"^(sede( di scarico)?|destinazione|punto vendita)\s*[:\-]?\s*", "", t.split(",")[0].strip(), flags=re.I)
+    return t[:60]
+
+
+async def _goose_lookup(table: str) -> dict:
+    """RECORD_ID -> record di una tabella GooseApp (per IDMAN / destinazioni)."""
+    if not table:
+        return {}
+    try:
+        rows = await gooseapp.select(table)
+    except gooseapp.GooseError as e:
+        logger.warning("Lookup GooseApp %s non riuscito: %s", table, e)
+        return {}
+    return {str(_ci_get(r, "RECORD_ID") or "").strip(): r for r in rows if _ci_get(r, "RECORD_ID")}
 
 
 async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
@@ -2201,11 +2267,18 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
 
     # Mandanti: il valore GooseApp (IDMAN/azienda) viene ricondotto al nome
     # dell'azienda in anagrafica quando coincide (match normalizzato).
+    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
+    comp_by_id = {c["id"]: c for c in companies}
     comp_map = {}
-    async for c in db.companies.find({}, {"_id": 0}):
+    for c in companies:
         comp_map[_norm(c["name"])] = c
         if c.get("goose_code"):
             comp_map[_norm(c["goose_code"])] = c
+    # Tabella di conversione permanente IDMAN -> azienda
+    man_map = {m["code"]: m async for m in db.goose_mandanti.find({}, {"_id": 0})}
+    man_lookup = await _goose_lookup(cfg.get("mandanti_table")) if cfg.get("mandanti_table") else {}
+    dest_lookup = await _goose_lookup(cfg.get("dest_table")) if cfg.get("dest_table") else {}
+    ship_fields = [f.strip() for f in (cfg.get("field_ship") or "").split(",") if f.strip()]
 
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
@@ -2229,12 +2302,25 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
                 continue
             site = _match_site(cli, str(rec.get(cfg.get("field_site") or "") or ""))
             created = _parse_goose_date(rec.get(cfg.get("field_date") or "")) or now_utc()
-            company_name = str(rec.get(cfg.get("field_company") or "") or "").strip() or None
-            company_id = None
-            if company_name:
-                comp = comp_map.get(_norm(company_name))
-                if comp:
-                    company_id, company_name = comp["id"], comp["name"]
+            company_code = str(rec.get(cfg.get("field_company") or "") or "").strip()
+            company_id, company_name = await _resolve_mandante(
+                company_code, man_map, man_lookup, comp_map, comp_by_id, companies)
+            ship_label = ""
+            if ship_fields:
+                raw_ship = " ".join(str(rec.get(f) or "").strip() for f in ship_fields).strip()
+                dest = dest_lookup.get(raw_ship)
+                if dest:
+                    ship_label = (_record_text(dest, _CITY_KEYS) or _record_text(dest, _NAME_KEYS)).title()
+                elif raw_ship and not re.fullmatch(r"[\d\-]+", raw_ship):
+                    ship_label = _ship_label(raw_ship)
+                if ship_label and not site.get("by_code"):
+                    # se la sede del cliente ha la stessa città/nome, la associamo
+                    k = _norm(ship_label)
+                    for st in (cli.get("extra") or {}).get("sites", []):
+                        if k and k in (_norm(st.get("citta")), _norm(st.get("nominativo"))):
+                            site = {"site_id": st.get("id"), "site_nominativo": st.get("nominativo") or "",
+                                    "site_indirizzo": st.get("indirizzo") or "", "matched": True}
+                            break
             order_number = _clean_doc_number(rec.get(cfg.get("field_number"))) if cfg.get("field_number") else ""
             doc = {
                 "id": str(uuid.uuid4()),
@@ -2249,6 +2335,10 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
                 "due_at": None,
                 "source": "gooseapp",
                 "goose_order_id": oid or None,
+                "goose_company_code": company_code or None,
+                "ship_label": ship_label or None,
+                "goose_record": {str(k): (v if isinstance(v, (str, int, float, bool)) or v is None else str(v))
+                                 for k, v in rec.items()},
                 "collection_method": None,
                 "collection_ref_date": None,
                 "site_id": site["site_id"],
@@ -2282,6 +2372,138 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
         upsert=True,
     )
     return summary
+
+
+async def _resolve_mandante(code, man_map, man_lookup, comp_map, comp_by_id, companies):
+    """IDMAN -> (company_id, company_name). Ordine: tabella di conversione
+    salvata, nome/codice azienda, tabella mandanti GooseApp (auto-salvata)."""
+    if not code:
+        return None, None
+    m = man_map.get(code)
+    if m and m.get("company_id") and comp_by_id.get(m["company_id"]):
+        c = comp_by_id[m["company_id"]]
+        return c["id"], c["name"]
+    c = comp_map.get(_norm(code))
+    if c:
+        return c["id"], c["name"]
+    if m and m.get("goose_name"):
+        c = _match_company(m["goose_name"], companies)
+        return (c["id"], c["name"]) if c else (None, m["goose_name"])
+    rec = man_lookup.get(code)
+    if rec:
+        gname = _record_text(rec, _NAME_KEYS)
+        c = _match_company(gname, companies) if gname else None
+        if not c:
+            for v in rec.values():
+                c = _match_company(str(v or ""), companies)
+                if c:
+                    break
+        entry = {"code": code, "goose_name": gname or None,
+                 "company_id": c["id"] if c else None, "updated_at": now_utc(), "auto": True}
+        await db.goose_mandanti.update_one({"code": code}, {"$set": entry}, upsert=True)
+        man_map[code] = entry
+        if c:
+            return c["id"], c["name"]
+        if gname:
+            return None, gname
+    return None, code
+
+
+async def _apply_mandante_to_events(code: str, company: Optional[dict], goose_name: Optional[str] = None):
+    q = {"source": "gooseapp", "$or": [{"goose_company_code": code}, {"company_name": code, "company_id": None}]}
+    if company:
+        st = {"company_id": company["id"], "company_name": company["name"], "goose_company_code": code}
+    else:
+        st = {"company_id": None, "company_name": goose_name or code, "goose_company_code": code}
+    res = await db.events.update_many(q, {"$set": st})
+    return res.modified_count
+
+
+@api.get("/goose/mandanti")
+async def goose_mandanti(user=Depends(require_admin)):
+    """Tabella di conversione IDMAN -> azienda, con i codici visti negli ordini."""
+    companies = {c["id"]: c for c in await db.companies.find({}, {"_id": 0}).to_list(1000)}
+    maps = {m["code"]: m async for m in db.goose_mandanti.find({}, {"_id": 0})}
+    counts, ev_comp = {}, {}
+    async for e in db.events.find({"source": "gooseapp", "deleted_at": None},
+                                  {"_id": 0, "goose_company_code": 1, "company_name": 1, "company_id": 1}):
+        code = e.get("goose_company_code") or (e.get("company_name") if not e.get("company_id") else None)
+        if code:
+            counts[code] = counts.get(code, 0) + 1
+            if e.get("company_id"):
+                ev_comp.setdefault(code, e["company_id"])
+    out = []
+    for code in sorted(set(counts) | set(maps)):
+        m = maps.get(code, {})
+        c = companies.get(m.get("company_id") or ev_comp.get(code))
+        out.append({"code": code, "orders": counts.get(code, 0), "goose_name": m.get("goose_name"),
+                    "company_id": c["id"] if c else None, "company_name": c["name"] if c else None})
+    out.sort(key=lambda r: (r["company_id"] is not None, -r["orders"]))
+    return out
+
+
+@api.put("/goose/mandanti")
+async def goose_set_mandante(body: GooseMandanteBody, user=Depends(require_admin)):
+    code = body.code.strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Codice mandante obbligatorio")
+    company = None
+    if body.company_id:
+        company = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
+        if not company:
+            raise HTTPException(status_code=404, detail="Azienda non trovata")
+    prev = await db.goose_mandanti.find_one({"code": code}, {"_id": 0}) or {}
+    await db.goose_mandanti.update_one(
+        {"code": code},
+        {"$set": {"code": code, "company_id": company["id"] if company else None,
+                  "updated_at": now_utc(), "auto": False}},
+        upsert=True)
+    n = await _apply_mandante_to_events(code, company, prev.get("goose_name"))
+    return {"ok": True, "updated_orders": n}
+
+
+@api.post("/goose/mandanti/auto")
+async def goose_auto_mandanti(user=Depends(require_admin)):
+    """Rileva automaticamente i nomi dei mandanti dalla tabella mandanti di
+    GooseApp (configurata o cercata tra le tabelle con 'MAN' nel nome) e
+    aggiorna la tabella di conversione + gli ordini già importati."""
+    cfg = await _goose_config()
+    codes = {r["code"] for r in await goose_mandanti(user) if not r["company_id"]}
+    candidates = [cfg["mandanti_table"]] if cfg.get("mandanti_table") else []
+    if not candidates:
+        try:
+            tabs = _normalize_tables(await gooseapp.list_tables())
+        except gooseapp.GooseError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        candidates = [t["name"] for t in tabs if "MAN" in t["name"].upper()]
+    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
+    used, mapped, named, unresolved = None, [], [], []
+    for table in candidates:
+        lookup = await _goose_lookup(table)
+        hits = {c for c in codes if c in lookup}
+        if not hits:
+            continue
+        used = table
+        for code in hits:
+            rec = lookup[code]
+            gname = _record_text(rec, _NAME_KEYS)
+            c = _match_company(gname, companies) if gname else None
+            if not c:
+                for v in rec.values():
+                    c = _match_company(str(v or ""), companies)
+                    if c:
+                        break
+            await db.goose_mandanti.update_one(
+                {"code": code},
+                {"$set": {"code": code, "goose_name": gname or None, "company_id": c["id"] if c else None,
+                          "updated_at": now_utc(), "auto": True}}, upsert=True)
+            await _apply_mandante_to_events(code, c, gname)
+            (mapped if c else named).append({"code": code, "goose_name": gname, "company": c["name"] if c else None})
+        break
+    if used and not cfg.get("mandanti_table"):
+        await db.goose_config.update_one({"id": "config"}, {"$set": {"mandanti_table": used}}, upsert=True)
+    unresolved = sorted(codes - {m["code"] for m in mapped + named})
+    return {"table": used, "candidates": candidates, "mapped": mapped, "named_only": named, "unresolved": unresolved}
 
 
 @api.get("/goose/status")
