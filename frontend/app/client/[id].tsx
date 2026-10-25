@@ -326,7 +326,7 @@ export default function ClientDetail() {
                 if (ev.type === "collection" && ev.company_name) detail = `Incasso ${ev.company_name}`;
                 if (ev.type === "suspension" && ev.company_name) detail = ev.company_name;
                 if (ev.type === "recurrence_order" && ev.recurrence_company) detail = `${ev.recurrence_company} · ${ev.recurrence_period ?? ""}`;
-                if (ev.type === "note" && ev.note_text) detail = ev.note_text;
+                if ((ev.type === "note" || ev.type === "visit") && ev.note_text) detail = ev.note_text;
                 if (ev.type === "reschedule" && ev.reschedule_until) detail = `Rivedere il ${shortDate(ev.reschedule_until)}`;
                 const sede = ev.ship_label || ev.site_nominativo;
                 if (sede) detail = detail ? `${detail} · 📍 Sede: ${sede}` : `📍 Sede: ${sede}`;

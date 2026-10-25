@@ -48,17 +48,83 @@ DUE_SOON_DAYS = 15  # finestra per considerare un incasso differito "in scadenza
 
 # Payment modes selectable per single order. days=None means no future suspension.
 PAYMENT_MODES = {
-    "anticipato": {"label": "Anticipato", "days": None},
-    "contrassegno": {"label": "Contrassegno", "days": None},
+    # Bonifici con scadenza -> promemoria sospeso
     "bonifico_30": {"label": "Bonifico bancario 30 giorni", "days": 30},
     "bonifico_60": {"label": "Bonifico bancario 60 giorni", "days": 60},
+    "bonifico_60_fm": {"label": "Bonifico bancario 60 gg fine mese", "days": 60},
+    "bonifico_90": {"label": "Bonifico bancario 90 giorni", "days": 90},
     "bonifico_vista_fattura": {"label": "Bonifico bancario vista fattura", "days": 15},
-    "agente_30": {"label": "Pagamento mezzo Agente 30 giorni", "days": 30},
-    "agente_60": {"label": "Pagamento mezzo Agente 60 giorni", "days": 60},
-    "agente_90": {"label": "Pagamento mezzo Agente 90 giorni", "days": 90},
+    "bonifico_anticipato": {"label": "Bonifico bancario anticipato", "days": None},
+    # Pagamenti alla consegna / immediati -> nessun promemoria
+    "pos_consegna": {"label": "Pagamento alla consegna tramite POS", "days": None},
+    "contanti_consegna": {"label": "Contanti alla consegna", "days": None},
+    "anticipato": {"label": "Anticipato", "days": None},
+    "contrassegno": {"label": "Contrassegno", "days": None},
+    # RID, Ri.Ba., Rifatturazione -> nessun promemoria
+    "rid_60": {"label": "R.I.D. 60 giorni", "days": None},
+    "riba_30": {"label": "Ri.Ba. 30 giorni", "days": None},
+    "riba_60": {"label": "Ri.Ba. 60 giorni", "days": None},
+    "riba_90": {"label": "Ri.Ba. 90 giorni", "days": None},
     "rifatturazione_pac": {"label": "Rifatturazione Pac", "days": None},
+    # Rimesse dirette mezzo agente -> promemoria "da incassare"
+    "agente_30": {"label": "Rimessa diretta 30 giorni mezzo agente", "days": 30},
+    "agente_60": {"label": "Rimessa diretta 60 giorni mezzo agente", "days": 60},
+    # Titolo allo scarico -> nessun promemoria
+    "titolo_vista": {"label": "Titolo allo scarico a vista", "days": None},
+    "titolo_30": {"label": "Titolo allo scarico 30 giorni", "days": None},
+    "titolo_60": {"label": "Titolo allo scarico 60 giorni", "days": None},
+    "titolo_90": {"label": "Titolo allo scarico 90 giorni", "days": None},
+    # storico (non più selezionabile)
+    "agente_90": {"label": "Pagamento mezzo Agente 90 giorni", "days": 90},
 }
-PAYMENT_MODE_ORDER = ["anticipato", "contrassegno", "bonifico_30", "bonifico_60", "bonifico_vista_fattura", "agente_30", "agente_60", "agente_90", "rifatturazione_pac"]
+PAYMENT_MODE_ORDER = [
+    "bonifico_30", "bonifico_60", "bonifico_60_fm", "bonifico_90", "bonifico_vista_fattura", "bonifico_anticipato",
+    "agente_30", "agente_60",
+    "pos_consegna", "contanti_consegna", "anticipato", "contrassegno",
+    "rid_60", "riba_30", "riba_60", "riba_90", "rifatturazione_pac",
+    "titolo_vista", "titolo_30", "titolo_60", "titolo_90",
+]
+
+
+def payment_mode_from_text(text) -> Optional[str]:
+    """Riconduce la descrizione di pagamento di GooseApp alla modalità interna."""
+    t = re.sub(r"[^a-z0-9 ]", " ", (str(text or "")).lower().replace("ri.ba", "riba").replace("r.i.d", "rid")
+               .replace("b.b.", "bonifico ").replace("d.f.f.m", "fine mese").replace("f.m.", "fine mese")
+               .replace("r.d.", "rimessa ").replace("r.b.", "riba "))
+    t = re.sub(r"\brb\b", "riba", re.sub(r"\brd\b", "rimessa", t))
+    t = " " + re.sub(r"\s+", " ", t).strip() + " "
+    if not t.strip():
+        return None
+    if t.strip() in PAYMENT_MODES:
+        return t.strip()
+    days = next((d for d in ("90", "60", "30") if f" {d} " in t or f" {d}gg" in t or f" {d}g " in t), None)
+    if "titolo" in t:
+        return {"30": "titolo_30", "60": "titolo_60", "90": "titolo_90"}.get(days, "titolo_vista")
+    if " riba " in t or "ricevuta bancaria" in t:
+        return {"60": "riba_60", "90": "riba_90"}.get(days, "riba_30")
+    if " rid " in t:
+        return "rid_60"
+    if "rifattur" in t:
+        return "rifatturazione_pac"
+    if "rimessa" in t or "agente" in t:
+        return {"60": "agente_60", "90": "agente_90"}.get(days, "agente_30")
+    if "bonifico" in t or " bb " in t:
+        if "anticipat" in t:
+            return "bonifico_anticipato"
+        if "vista" in t:
+            return "bonifico_vista_fattura"
+        if days == "60" and ("fine mese" in t or " fm " in t or " dffm " in t):
+            return "bonifico_60_fm"
+        return {"30": "bonifico_30", "60": "bonifico_60", "90": "bonifico_90"}.get(days)
+    if " pos " in t:
+        return "pos_consegna"
+    if "contant" in t:
+        return "contanti_consegna"
+    if "contrassegno" in t:
+        return "contrassegno"
+    if "anticipat" in t:
+        return "anticipato"
+    return None
 
 app = FastAPI(title="Rodomisto Rappresentanze API")
 api = APIRouter(prefix="/api")
@@ -1413,6 +1479,8 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Nota vuota")
         doc["note_text"] = body.note_text.strip()
 
+    if body.type == "visit" and body.note_text and body.note_text.strip():
+        doc["note_text"] = body.note_text.strip()[:200]
     if body.type == "reschedule":
         target = None
         if body.reschedule_date:
@@ -2106,6 +2174,8 @@ GOOSE_DEFAULT_CONFIG = {
     "field_ship": "",         # campo/i indirizzo di spedizione o destinazione (separati da virgola)
     "dest_table": "",         # tabella destinazioni (se field_ship contiene un ID)
     "mandanti_table": "",     # tabella mandanti GooseApp (RECORD_ID = IDMAN)
+    "field_payment": "",      # campo modalità di pagamento dell'ordine
+    "payment_table": "",      # tabella modalità di pagamento (se il campo contiene un ID)
 }
 
 
@@ -2120,6 +2190,8 @@ class GooseConfigBody(BaseModel):
     field_ship: Optional[str] = None
     dest_table: Optional[str] = None
     mandanti_table: Optional[str] = None
+    field_payment: Optional[str] = None
+    payment_table: Optional[str] = None
 
 
 class GooseMandanteBody(BaseModel):
@@ -2279,6 +2351,7 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
     man_lookup = await _goose_lookup(cfg.get("mandanti_table")) if cfg.get("mandanti_table") else {}
     dest_lookup = await _goose_lookup(cfg.get("dest_table")) if cfg.get("dest_table") else {}
     ship_fields = [f.strip() for f in (cfg.get("field_ship") or "").split(",") if f.strip()]
+    pay_lookup = await _goose_lookup(cfg.get("payment_table")) if cfg.get("payment_table") else {}
 
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
@@ -2322,6 +2395,11 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
                                     "site_indirizzo": st.get("indirizzo") or "", "matched": True}
                             break
             order_number = _clean_doc_number(rec.get(cfg.get("field_number"))) if cfg.get("field_number") else ""
+            pay_raw = str(rec.get(cfg.get("field_payment") or "") or "").strip()
+            pay_rec = pay_lookup.get(pay_raw)
+            pay_text = (_record_text(pay_rec, _NAME_KEYS) or " ".join(str(v) for v in pay_rec.values())) if pay_rec else pay_raw
+            pay_mode = payment_mode_from_text(pay_text)
+            pay_days = PAYMENT_MODES[pay_mode]["days"] if pay_mode else None
             doc = {
                 "id": str(uuid.uuid4()),
                 "client_id": cli["id"],
@@ -2331,8 +2409,9 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
                 "note_text": None,
                 "order_number": order_number or None,
                 "reschedule_until": None,
-                "payment_mode": None,
-                "due_at": None,
+                "payment_mode": pay_mode,
+                "payment_text": pay_text or None,
+                "due_at": (created + timedelta(days=pay_days)) if pay_days else None,
                 "source": "gooseapp",
                 "goose_order_id": oid or None,
                 "goose_company_code": company_code or None,

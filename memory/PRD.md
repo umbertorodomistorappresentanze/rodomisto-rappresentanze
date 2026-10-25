@@ -325,3 +325,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Nuova modalità pagamento `bonifico_vista_fattura` (sospeso a 15 giorni dalla data ordine).
 - Picker aziende (Ordine/Incassato/Sospeso): ricerca "Cerca azienda..." + scroll interno. Modifica ordine: campo "Data ordine" con ricalcolo scadenza sospeso.
 - GooseApp: tabella conversione IDMAN→azienda (goose_mandanti, UI in /goose-sync, auto-rilevamento tabella 'MAN'); sede spedizione (field_ship/dest_table) → ship_label mostrata come '(Sede: X)'.
+- Giro: riepilogo Clienti / Da gestire (/da-gestire/[id], pulsante 'Gestito' = visita senza ordine) / Gestiti. Modalità pagamento estese: promemoria solo per bonifici con scadenza (15/30/60/90) e rimesse mezzo agente (30/60). GooseApp: field_payment/payment_table → payment_mode + due_at.

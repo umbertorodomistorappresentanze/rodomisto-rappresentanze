@@ -71,13 +71,11 @@ export default function Dashboard() {
       return [{ title: "RISULTATI", count: found.length, data: found }];
     }
     const list = clientsQuery.data ?? [];
-    const daVisitare = list.filter((c) => c.status === "da_visitare");
-    const gestiti = list.filter((c) => c.status !== "da_visitare");
-    const out: { title: string; count: number; data: Client[] }[] = [];
-    out.push({ title: "DA VISITARE", count: daVisitare.length, data: daVisitare });
-    out.push({ title: "GIÀ VISITATI / GESTITI", count: gestiti.length, data: gestiti });
-    return out;
+    return [{ title: "CLIENTI", count: list.length, data: list }];
   }, [clientsQuery.data, searching, searchQuery.data]);
+
+  const daGestireCount = (clientsQuery.data ?? []).filter((c) => c.status === "da_visitare").length;
+  const gestitiCount = (clientsQuery.data ?? []).length - daGestireCount;
 
   function onActionSuccess(message: string) {
     toast(message, "success");
@@ -206,16 +204,28 @@ export default function Dashboard() {
             {activeGiroId && !searching && (clientsQuery.data?.length ?? 0) > 0 ? (
               <View style={styles.summaryCard}>
                 <View style={styles.summaryItem}>
-                  <AppText weight="bold" style={styles.summaryNumber}>{sections[0].count}</AppText>
-                  <AppText weight="medium" style={styles.summaryLabel}>Da visitare</AppText>
+                  <AppText weight="bold" style={[styles.summaryNumber, { color: colors.onSurface }]}>{sections[0].count}</AppText>
+                  <AppText weight="medium" style={styles.summaryLabel}>Clienti</AppText>
                 </View>
+                <View style={styles.summaryDivider} />
+                <Pressable
+                  testID="giro-da-gestire-btn"
+                  onPress={() => router.push(`/da-gestire/${activeGiroId}`)}
+                  style={styles.summaryItem}
+                >
+                  <AppText weight="bold" style={styles.summaryNumber}>{daGestireCount}</AppText>
+                  <View style={styles.gestitiLabelRow}>
+                    <AppText weight="medium" style={styles.summaryLabel}>Da gestire</AppText>
+                    <CaretRight size={13} color={colors.brand} weight="bold" />
+                  </View>
+                </Pressable>
                 <View style={styles.summaryDivider} />
                 <Pressable
                   testID="giro-gestiti-btn"
                   onPress={() => router.push(`/gestiti/${activeGiroId}`)}
                   style={styles.summaryItem}
                 >
-                  <AppText weight="bold" style={[styles.summaryNumber, { color: colors.muted }]}>{sections[1].count}</AppText>
+                  <AppText weight="bold" style={[styles.summaryNumber, { color: colors.muted }]}>{gestitiCount}</AppText>
                   <View style={styles.gestitiLabelRow}>
                     <AppText weight="medium" style={styles.summaryLabel}>Gestiti</AppText>
                     <CaretRight size={13} color={colors.brand} weight="bold" />
@@ -241,9 +251,7 @@ export default function Dashboard() {
             <AppText style={styles.emptySection}>
               {searching
                 ? "Nessun cliente trovato"
-                : section.title === "DA VISITARE"
-                ? "Nessun cliente da visitare in questo giro."
-                : "Nessun cliente ancora gestito."}
+                : "Nessun cliente in questo giro."}
             </AppText>
           ) : null
         }

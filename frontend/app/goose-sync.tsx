@@ -20,9 +20,10 @@ const ASSIGN_LABELS: Record<string, string> = {
   field_date: "Data ordine",
   field_order_id: "ID ordine",
   field_ship: "Indirizzo spedizione",
+  field_payment: "Modalità di pagamento",
 };
 const ASSIGN_KEYS: (keyof import("@/src/api").GooseConfig)[] = [
-  "field_piva", "field_site", "field_company", "field_number", "field_date", "field_order_id", "field_ship",
+  "field_piva", "field_site", "field_company", "field_number", "field_date", "field_order_id", "field_ship", "field_payment",
 ];
 
 export default function GooseSyncScreen() {
@@ -292,6 +293,8 @@ export default function GooseSyncScreen() {
                 <CfgField label="Campo data ordine" value={config.field_date ?? ""} onChange={setField("field_date")} />
                 <CfgField label="Campo ID ordine" value={config.field_order_id ?? ""} onChange={setField("field_order_id")} />
                 <CfgField label="Campo/i indirizzo spedizione / sede di scarico (separati da virgola)" value={config.field_ship ?? ""} onChange={setField("field_ship")} />
+                <CfgField label="Campo modalità di pagamento (attiva i promemoria sospesi)" value={config.field_payment ?? ""} onChange={setField("field_payment")} />
+                <CfgField label="Tabella modalità di pagamento (opzionale, se il campo contiene un ID)" value={config.payment_table ?? ""} onChange={setField("payment_table")} />
                 <CfgField label="Tabella destinazioni (opzionale, se il campo spedizione è un ID)" value={config.dest_table ?? ""} onChange={setField("dest_table")} />
                 <CfgField label="Tabella mandanti (opzionale, rilevata in automatico)" value={config.mandanti_table ?? ""} onChange={setField("mandanti_table")} />
                 <Button title="Salva configurazione" onPress={saveConfig} testID="goose-config-save" />

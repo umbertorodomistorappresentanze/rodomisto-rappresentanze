@@ -275,6 +275,8 @@ export type GooseConfig = {
   field_number: string;
   field_date: string;
   field_ship: string;
+  field_payment: string;
+  payment_table: string;
   dest_table: string;
   mandanti_table: string;
 };

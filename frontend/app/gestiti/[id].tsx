@@ -47,7 +47,7 @@ export default function GestitiScreen() {
       ) : (
         <FlatList
           data={gestiti}
-          keyExtractor={(c) => c.id}
+          keyExtractor={(c) => c.row_id ?? c.id}
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.sm, paddingBottom: insets.bottom + spacing.xl }}
           renderItem={({ item }) => (
             <View style={styles.row}>
@@ -72,7 +72,7 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: spacing.lg, paddingBottom: spacing.md,
     backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  backBtn: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 18, color: c.onSurface },
   sub: { fontSize: 13, color: c.muted, marginTop: 1 },
   row: {
