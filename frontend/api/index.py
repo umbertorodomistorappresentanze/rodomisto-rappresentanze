@@ -997,14 +997,14 @@ async def delete_giro(giro_id: str, user=Depends(get_current_user)):
 # Clients
 # ---------------------------------------------------------------------------
 async def _handled_month_ids(client_ids: List[str]) -> set:
-    """Clienti con almeno un'attività (ordine, visita, incasso, nota) nel MESE
+    """Clienti con almeno un'azione reale (ordine, incasso, nota) nel MESE
     corrente. Base per il conteggio GESTITI mensile (reset il 1° del mese)."""
     if not client_ids:
         return set()
     start = start_of_month_utc()
     cursor = db.events.find(
         {"client_id": {"$in": client_ids}, "created_at": {"$gte": start}, "deleted_at": None,
-         "type": {"$in": ["order", "visit", "collection", "note"]}},
+         "type": {"$in": ["order", "collection", "note"]}},
         {"_id": 0, "client_id": 1},
     )
     ids = set()
@@ -1089,18 +1089,11 @@ async def _last_events_for(client_ids: List[str], types: List[str]) -> dict:
 
 
 def _compute_status(doc: dict, handled_month: set) -> str:
-    """Logica MENSILE: un cliente è GESTITO se ha avuto almeno un'attività
-    (ordine/visita/incasso/nota) nel mese corrente, oppure se è stato rimandato
-    a una data futura. Altrimenti è DA VISITARE. Reset automatico il 1° del mese."""
-    now = now_utc()
+    """Logica MENSILE: un cliente è GESTITO solo se nel mese corrente ha avuto
+    un'azione reale (ordine, incasso, nota). Visite e rinvii non contano.
+    Altrimenti è DA VISITARE. Reset automatico il 1° del mese."""
     if doc["id"] in handled_month:
         return "gestito"
-    snoozed = doc.get("snoozed_until")
-    if snoozed is not None:
-        if snoozed.tzinfo is None:
-            snoozed = snoozed.replace(tzinfo=timezone.utc)
-        if snoozed > now:
-            return "gestito"
     return "da_visitare"
 
 
