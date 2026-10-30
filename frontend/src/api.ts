@@ -244,6 +244,7 @@ export type RecurrenceDef = {
 export type RecurrenceClient = Client & {
   recurrence_status: "da_gestire" | "ordine_effettuato";
   order_date: string | null;
+  order_auto?: boolean;
   member_id: string;
 };
 export type RecurrenceGroup = { group: string; clients: RecurrenceClient[] };

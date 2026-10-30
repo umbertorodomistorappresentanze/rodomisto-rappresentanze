@@ -31,7 +31,10 @@ export default function RicorrenzaDetail() {
   const periods = rdef?.periods ?? [];
 
   const [periodKey, setPeriodKey] = useState<string | null>(null);
-  const activePeriod = periodKey ?? periods[0]?.key ?? null;
+  // Periodo predefinito: quello stagionale in corso (es. Natale set–dic).
+  const mmdd = new Date().toISOString().slice(5, 10);
+  const currentPeriod = periods.find((p) => p.start <= mmdd && mmdd <= p.end)?.key;
+  const activePeriod = periodKey ?? currentPeriod ?? periods[0]?.key ?? null;
   const [filter, setFilter] = useState<"da_gestire" | "ordine_effettuato">("da_gestire");
   const [search, setSearch] = useState("");
 
@@ -211,10 +214,12 @@ export default function RicorrenzaDetail() {
                   <AppText style={styles.review}>⚠︎ Da verificare</AppText>
                 ) : null}
                 {item.recurrence_status === "ordine_effettuato" ? (
-                  <AppText style={styles.doneDate}>Ordine del {fmtDate(item.order_date)}</AppText>
+                  <AppText style={styles.doneDate}>
+                    Ordine del {fmtDate(item.order_date)}{item.order_auto ? " · registrato automaticamente" : ""}
+                  </AppText>
                 ) : null}
               </View>
-              {item.recurrence_status === "da_gestire" ? (
+              {item.recurrence_status === "ordine_effettuato" && item.order_auto ? null : item.recurrence_status === "da_gestire" ? (
                 <Pressable
                   testID={`order-${item.id}`}
                   disabled={order.isPending}

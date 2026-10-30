@@ -717,6 +717,10 @@ async def seed_recurrences():
     # Seed recurrence definitions (idempotent by company key).
     for d in recurrence_seed.RECURRENCE_DEFS:
         existing = await db.recurrence_defs.find_one({"company": d["company"]})
+        if existing:
+            # Periodi stagionali sempre allineati alla configurazione
+            # (Natale: set–dic, Pasqua: feb–mag).
+            await db.recurrence_defs.update_one({"company": d["company"]}, {"$set": {"periods": d["periods"]}})
         if not existing:
             await db.recurrence_defs.insert_one({
                 "id": str(uuid.uuid4()),
@@ -1826,22 +1830,48 @@ def _rome_year_start() -> datetime:
     return datetime(now_rome.year, 1, 1, tzinfo=ROME).astimezone(timezone.utc)
 
 
-async def _recurrence_done_ids(company: str, period: str, client_ids: List[str]) -> dict:
-    """Return {client_id: order_iso_date} for orders placed this calendar year."""
+def _period_window(pdef: dict):
+    """[inizio, fine) del periodo stagionale dell'anno corrente (ora di Roma)."""
+    year = now_utc().astimezone(ROME).year
+    sm, sd = (int(x) for x in pdef["start"].split("-"))
+    em, ed = (int(x) for x in pdef["end"].split("-"))
+    start = datetime(year, sm, sd, tzinfo=ROME)
+    end = datetime(year, em, ed, tzinfo=ROME) + timedelta(days=1)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
+async def _recurrence_done_ids(rdef: dict, period: str, client_ids: List[str]) -> dict:
+    """{client_id: data_ordine_iso}: clienti 'Gestiti' nel periodo stagionale.
+    Conta sia la spunta manuale della ricorrenza (anno corrente) sia qualsiasi
+    ordine reale per il marchio (inserito a mano o da GooseApp) effettuato
+    all'interno del periodo (Natale: set–dic, Pasqua: feb–mag)."""
     if not client_ids:
         return {}
-    start = _rome_year_start()
+    company = rdef["company"]
+    out = {}
     cursor = db.events.find(
         {"type": "recurrence_order", "recurrence_company": company,
          "recurrence_period": period, "client_id": {"$in": client_ids},
-         "created_at": {"$gte": start}, "deleted_at": None},
+         "created_at": {"$gte": _rome_year_start()}, "deleted_at": None},
         {"_id": 0, "client_id": 1, "created_at": 1},
     )
-    out = {}
     async for e in cursor:
-        cid = e["client_id"]
-        if cid not in out:
-            out[cid] = iso(e["created_at"])
+        out.setdefault(e["client_id"], {"date": iso(e["created_at"]), "auto": False})
+    pdef = next((p for p in rdef["periods"] if p["key"] == period), None)
+    if pdef:
+        start, end = _period_window(pdef)
+        brand = {_norm(company), _norm(rdef.get("label"))}
+        comp_ids = [c["id"] async for c in db.companies.find({}, {"_id": 0, "id": 1, "name": 1})
+                    if any(b and b.split()[0] in _norm(c["name"]) for b in brand)]
+        cursor = db.events.find(
+            {"type": "order", "client_id": {"$in": client_ids}, "deleted_at": None,
+             "created_at": {"$gte": start, "$lt": end},
+             "$or": [{"company_id": {"$in": comp_ids}},
+                     {"company_name": {"$regex": re.escape(company), "$options": "i"}}]},
+            {"_id": 0, "client_id": 1, "created_at": 1},
+        ).sort("created_at", 1)
+        async for e in cursor:
+            out.setdefault(e["client_id"], {"date": iso(e["created_at"]), "auto": True})
     return out
 
 
@@ -1881,7 +1911,7 @@ async def recurrence_members(company: str, period: str = Query(...), user=Depend
             continue
         visible.append((m, cli))
 
-    done = await _recurrence_done_ids(company, period, [c["id"] for _, c in visible])
+    done = await _recurrence_done_ids(rdef, period, [c["id"] for _, c in visible])
 
     # Group by recurrence group, preserving def group order then position.
     group_order = {g: i for i, g in enumerate(rdef["groups"])}
@@ -1896,7 +1926,8 @@ async def recurrence_members(company: str, period: str = Query(...), user=Depend
             groups_out.append(current)
         pub = client_public(cli)
         pub["recurrence_status"] = "ordine_effettuato" if cli["id"] in done else "da_gestire"
-        pub["order_date"] = done.get(cli["id"])
+        pub["order_date"] = (done.get(cli["id"]) or {}).get("date")
+        pub["order_auto"] = (done.get(cli["id"]) or {}).get("auto", False)
         pub["member_id"] = m["id"]
         current["clients"].append(pub)
 

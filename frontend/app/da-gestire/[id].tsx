@@ -9,6 +9,7 @@ import { apiGet, Client, Company, Giro, PaymentMode } from "@/src/api";
 import { AppText, Loading } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { QuickActionsRef, QuickActionsSheet } from "@/src/components/quick-actions-sheet";
+import { SuspensionBadge } from "@/src/components/suspension-badge";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 /** Clienti del giro senza azioni reali nel mese corrente, nell'ordine del giro.
@@ -74,7 +75,13 @@ export default function DaGestireScreen() {
               style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
             >
               <View style={{ flex: 1 }}>
-                <AppText weight="semibold" style={styles.name} numberOfLines={2}>{item.ragione_sociale}</AppText>
+                <View style={styles.nameRow}>
+                  <AppText weight="semibold" style={[styles.name, { flexShrink: 1 }]} numberOfLines={2}>{item.ragione_sociale}</AppText>
+                  <SuspensionBadge count={item.suspensions?.length ?? 0} testID={`susp-badge-${item.row_id ?? item.id}`} />
+                </View>
+                {item.suspensions && item.suspensions.length > 0 ? (
+                  <AppText style={styles.suspText} numberOfLines={1}>{item.suspensions.join(" · ")}</AppText>
+                ) : null}
                 {item.site_nominativo ? <AppText style={styles.sub} numberOfLines={1}>📍 {item.site_nominativo}</AppText> : null}
               </View>
               <CaretRight size={16} color={colors.muted} weight="bold" />
@@ -115,6 +122,8 @@ const useStyles = makeStyles((c) => ({
     borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 56,
   },
   name: { fontSize: 15, color: c.onSurface },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  suspText: { fontSize: 12, color: "#B91C1C", marginTop: 2 },
   empty: { padding: spacing.xl, alignItems: "center" },
   emptyText: { fontSize: 14, color: c.muted, fontStyle: "italic", textAlign: "center" },
 }));

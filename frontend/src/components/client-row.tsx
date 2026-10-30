@@ -3,6 +3,7 @@ import { ClockCounterClockwise, DotsThreeVertical, MapPin, Phone, Storefront, Wa
 
 import { Client } from "@/src/api";
 import { AppText } from "@/src/components/ui";
+import { SuspensionBadge } from "@/src/components/suspension-badge";
 import { lastActionLabel } from "@/src/utils/last-action";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -21,6 +22,7 @@ const useStyles = makeStyles((c) => ({
   },
   info: { flex: 1, gap: 3 },
   name: { fontSize: 16, color: c.onSurface },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   siteName: { fontSize: 13, color: c.brand },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
   meta: { fontSize: 13, color: c.muted },
@@ -85,9 +87,12 @@ export function ClientRow({
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.info}>
-        <AppText weight="semibold" style={styles.name} numberOfLines={1}>
-          {client.ragione_sociale}
-        </AppText>
+        <View style={styles.nameRow}>
+          <AppText weight="semibold" style={[styles.name, { flexShrink: 1 }]} numberOfLines={2}>
+            {client.ragione_sociale}
+          </AppText>
+          <SuspensionBadge count={client.suspensions?.length ?? 0} testID={`susp-badge-${rowKey}`} />
+        </View>
         {client.site_nominativo ? (
           <View style={styles.metaRow}>
             <Storefront size={13} color={colors.brand} weight="fill" />

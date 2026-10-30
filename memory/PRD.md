@@ -327,3 +327,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - GooseApp: tabella conversione IDMAN→azienda (goose_mandanti, UI in /goose-sync, auto-rilevamento tabella 'MAN'); sede spedizione (field_ship/dest_table) → ship_label mostrata come '(Sede: X)'.
 - Giro: riepilogo Clienti / Da gestire (/da-gestire/[id], pulsante 'Gestito' = visita senza ordine) / Gestiti. Modalità pagamento estese: promemoria solo per bonifici con scadenza (15/30/60/90) e rimesse mezzo agente (30/60). GooseApp: field_payment/payment_table → payment_mode + due_at.
 - Da gestire: rimosso pulsante 'Gestito'; tap riga apre azioni complete; gestito solo con ordine/incasso/nota nel mese (visite e rinvii non contano).
+- Ricorrenze: periodi Natale 09-01→12-31, Pasqua 02-01→05-31; ordini reali del marchio nel periodo = Gestiti automatico (order_auto). Badge SOSPESO nel giro e in Da gestire.
