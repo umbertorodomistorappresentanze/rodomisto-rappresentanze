@@ -1842,24 +1842,25 @@ def _period_window(pdef: dict):
 
 async def _recurrence_done_ids(rdef: dict, period: str, client_ids: List[str]) -> dict:
     """{client_id: data_ordine_iso}: clienti 'Gestiti' nel periodo stagionale.
-    Conta sia la spunta manuale della ricorrenza (anno corrente) sia qualsiasi
+    Conta sia la spunta manuale fatta nel periodo sia qualsiasi
     ordine reale per il marchio (inserito a mano o da GooseApp) effettuato
     all'interno del periodo (Natale: set–dic, Pasqua: feb–mag)."""
     if not client_ids:
         return {}
     company = rdef["company"]
     out = {}
-    cursor = db.events.find(
-        {"type": "recurrence_order", "recurrence_company": company,
-         "recurrence_period": period, "client_id": {"$in": client_ids},
-         "created_at": {"$gte": _rome_year_start()}, "deleted_at": None},
-        {"_id": 0, "client_id": 1, "created_at": 1},
-    )
-    async for e in cursor:
-        out.setdefault(e["client_id"], {"date": iso(e["created_at"]), "auto": False})
     pdef = next((p for p in rdef["periods"] if p["key"] == period), None)
     if pdef:
         start, end = _period_window(pdef)
+        # Spunte manuali: valgono solo se fatte dentro il proprio periodo.
+        cursor = db.events.find(
+            {"type": "recurrence_order", "recurrence_company": company,
+             "recurrence_period": period, "client_id": {"$in": client_ids},
+             "created_at": {"$gte": start, "$lt": end}, "deleted_at": None},
+            {"_id": 0, "client_id": 1, "created_at": 1},
+        )
+        async for e in cursor:
+            out.setdefault(e["client_id"], {"date": iso(e["created_at"]), "auto": False})
         brand = {_norm(company), _norm(rdef.get("label"))}
         comp_ids = [c["id"] async for c in db.companies.find({}, {"_id": 0, "id": 1, "name": 1})
                     if any(b and b.split()[0] in _norm(c["name"]) for b in brand)]
@@ -1944,6 +1945,13 @@ async def recurrence_order(company: str, body: RecurrenceOrderBody, user=Depends
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     if user.get("role") != "admin" and cli.get("agent") != user["username"]:
         raise HTTPException(status_code=403, detail="Non puoi gestire questo cliente")
+    pdef = next(p for p in rdef["periods"] if p["key"] == body.period)
+    p_start, p_end = _period_window(pdef)
+    if not (p_start <= now_utc() < p_end):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fuori periodo: la spunta {pdef['label']} è consentita solo dal "
+                   f"{pdef['start'][3:]}/{pdef['start'][:2]} al {pdef['end'][3:]}/{pdef['end'][:2]}")
     now = now_utc()
     doc = {
         "id": str(uuid.uuid4()),

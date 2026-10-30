@@ -206,7 +206,7 @@ export default function RicorrenzaDetail() {
                 <Trash size={18} color={colors.error} weight="bold" />
               </Pressable>
               <View style={{ flex: 1 }}>
-                <AppText weight="semibold" style={styles.cName} numberOfLines={2}>{item.ragione_sociale}</AppText>
+                <AppText weight="semibold" style={styles.cName}>{item.ragione_sociale}</AppText>
                 <AppText style={styles.cMeta} numberOfLines={1}>
                   {item.citta}{item.provincia ? ` (${item.provincia})` : ""}
                 </AppText>
@@ -305,10 +305,10 @@ const useStyles = makeStyles((c) => ({
   review: { fontSize: 11, color: c.warning, marginTop: 2 },
   doneDate: { fontSize: 12, color: c.success, marginTop: 2 },
   orderBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: c.brand, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, flexShrink: 0, maxWidth: 112,
+    backgroundColor: c.brand, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 6, minHeight: 44,
   },
-  orderBtnText: { fontSize: 13, color: c.onBrand },
+  orderBtnText: { fontSize: 12, lineHeight: 15, color: c.onBrand, textAlign: "center", flexShrink: 1 },
   undoBtn: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   empty: { padding: spacing.xl, alignItems: "center" },
   emptyText: { fontSize: 14, color: c.muted, fontStyle: "italic" },
