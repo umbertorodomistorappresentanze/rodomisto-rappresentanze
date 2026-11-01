@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { CalendarBlank } from "phosphor-react-native";
@@ -20,10 +20,12 @@ function fmt(d: Date) {
 export function toISODate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function parse(text: string): Date | null {
-  const m = text.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+function parse(text: string, allowShortYear = true): Date | null {
+  // Accetta G/M/AA(AA) con separatori / - . (es. 5/10/26, 05-10-2026)
+  const m = text.trim().match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/);
   if (!m) return null;
-  const dd = +m[1], mm = +m[2], yyyy = +m[3];
+  if (m[3].length === 2 && !allowShortYear) return null;
+  const dd = +m[1], mm = +m[2], yyyy = m[3].length === 2 ? 2000 + +m[3] : +m[3];
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
   const d = new Date(yyyy, mm - 1, dd, 12, 0, 0, 0);
   if (d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
@@ -53,9 +55,13 @@ export function ActivityDateField({
   const styles = makeStyles(colors);
   const [showPicker, setShowPicker] = useState(false);
   const [text, setText] = useState(fmt(value));
+  const [error, setError] = useState<string | null>(null);
+
+  const focused = useRef(false);
 
   useEffect(() => {
-    setText(fmt(value));
+    // Non riscrivere il testo mentre l'utente sta digitando.
+    if (!focused.current) setText(fmt(value));
   }, [value]);
 
   const today = startOfDay(new Date());
@@ -71,7 +77,7 @@ export function ActivityDateField({
             <Pressable
               key={q.label}
               testID={`activity-date-${q.d}`}
-              onPress={() => onChange(d)}
+              onPress={() => { setError(null); onChange(d); }}
               style={[styles.chip, active && styles.chipActive]}
             >
               <AppText weight="semibold" style={[styles.chipText, active && { color: colors.onBrand }]}>
@@ -89,8 +95,29 @@ export function ActivityDateField({
             value={text}
             onChangeText={(t) => {
               setText(t);
-              const p = parse(t);
-              if (p) onChange(startOfDay(p));
+              // Durante la digitazione accettiamo solo l'anno a 4 cifre
+              // (es. "05/10/20" non deve diventare 2020 mentre si scrive 2026).
+              const p = parse(t, false);
+              if (p && p.getTime() <= startOfDay(new Date()).getTime()) {
+                setError(null);
+                onChange(startOfDay(p));
+              }
+            }}
+            onFocus={() => { focused.current = true; }}
+            onBlur={() => {
+              focused.current = false;
+              const p = parse(text);
+              if (!p) {
+                setError("Data non valida: usa GG/MM/AAAA. Resta impostato il " + fmt(value));
+                setText(fmt(value));
+              } else if (p.getTime() > startOfDay(new Date()).getTime()) {
+                setError("La data non può essere futura. Resta impostato il " + fmt(value));
+                setText(fmt(value));
+              } else {
+                setError(null);
+                onChange(startOfDay(p));
+                setText(fmt(p));
+              }
             }}
             placeholder="GG/MM/AAAA"
             placeholderTextColor={colors.muted}
@@ -117,6 +144,8 @@ export function ActivityDateField({
           ) : null}
         </>
       )}
+      {error ? <AppText testID="activity-date-error" style={styles.error}>{error}</AppText> : null}
+      <AppText testID="activity-date-selected" style={styles.selected}>Data registrata: {fmt(value)}</AppText>
     </View>
   );
 }
@@ -133,6 +162,8 @@ function makeStyles(c: ReturnType<typeof useTheme>["colors"]) {
       marginBottom: spacing.sm,
     },
     label: { fontSize: 13, color: c.onSurfaceTertiary },
+    error: { fontSize: 12, color: c.error },
+    selected: { fontSize: 12, color: c.onSurfaceSecondary },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
     chip: {
       paddingHorizontal: spacing.md,

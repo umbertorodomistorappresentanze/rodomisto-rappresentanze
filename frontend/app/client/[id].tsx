@@ -125,10 +125,15 @@ export default function ClientDetail() {
   const giroName = giriQuery.data?.find((g) => g.id === client.giro_id)?.name;
 
   const hist = historyQuery.data ?? [];
-  const lastOf = (t: string) => hist.find((e) => e.type === t)?.created_at ?? null;
+  // Ultimo evento per DATA EFFETTIVA (non per ordine di inserimento).
+  const lastEv = (t: string) =>
+    hist.filter((e) => e.type === t && e.created_at)
+      .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())[0];
+  const lastOf = (t: string) => lastEv(t)?.created_at ?? null;
   const ultimaAzione = lastActionLabel({
     last_visit_at: lastOf("visit"),
     last_order_at: lastOf("order"),
+    last_order_company: lastEv("order")?.company_name ?? null,
     last_collection_at: lastOf("collection"),
   });
 

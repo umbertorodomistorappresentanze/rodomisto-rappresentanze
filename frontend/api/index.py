@@ -241,6 +241,20 @@ def parse_activity_date(raw: Optional[str], default: datetime) -> datetime:
         return default
 
 
+def _checked_activity_date(raw: Optional[str], default: datetime) -> datetime:
+    """Come parse_activity_date ma rifiuta date illeggibili o future (400)."""
+    if not raw:
+        return default
+    sentinel = datetime(1900, 1, 1, tzinfo=timezone.utc)
+    dt = parse_activity_date(raw, sentinel)
+    if dt == sentinel:
+        raise HTTPException(status_code=400, detail="Data non valida")
+    end_today = start_of_today_utc() + timedelta(days=1)
+    if dt >= end_today:
+        raise HTTPException(status_code=400, detail="La data non può essere futura")
+    return dt
+
+
 def start_of_today_utc() -> datetime:
     local = datetime.now(ROME)
     start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1078,8 +1092,9 @@ async def _last_events_for(client_ids: List[str], types: List[str]) -> dict:
         return out
     events = await db.events.find(
         {"client_id": {"$in": client_ids}, "deleted_at": None, "type": {"$in": types}},
-        {"_id": 0, "client_id": 1, "created_at": 1, "type": 1},
+        {"_id": 0, "client_id": 1, "created_at": 1, "type": 1, "company_name": 1},
     ).to_list(200000)
+    out["_company"] = {t: {} for t in types}
     for e in events:
         t = e["type"]
         cid = e["client_id"]
@@ -1089,6 +1104,7 @@ async def _last_events_for(client_ids: List[str], types: List[str]) -> dict:
         d = out[t]
         if cid not in d or cur > d[cid]:
             d[cid] = cur
+            out["_company"][t][cid] = e.get("company_name")
     return out
 
 
@@ -1120,6 +1136,7 @@ async def list_clients(giro_id: str = Query(...), user=Depends(get_current_user)
         base["handled_this_month"] = d["id"] in handled
         base["suspensions"] = suspensions.get(d["id"], [])
         base["last_order_at"] = iso(last_ev["order"].get(d["id"]))
+        base["last_order_company"] = last_ev["_company"]["order"].get(d["id"])
         base["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
 
         # Sede principale (dati anagrafici del cliente)
@@ -1235,6 +1252,7 @@ async def search_clients(q: str = Query("", alias="q"), user=Depends(get_current
         pub["handled_this_month"] = d["id"] in handled
         pub["suspensions"] = suspensions.get(d["id"], [])
         pub["last_order_at"] = iso(last_ev["order"].get(d["id"]))
+        pub["last_order_company"] = last_ev["_company"]["order"].get(d["id"])
         pub["last_collection_at"] = iso(last_ev["collection"].get(d["id"]))
         result.append(pub)
     return result
@@ -1415,7 +1433,7 @@ async def create_event(body: EventCreate, user=Depends(get_current_user)):
     now = now_utc()
     # Data dell'attività scelta dall'utente (default: adesso). Consente di
     # registrare ordini/visite/incassi effettuati nei giorni precedenti.
-    base = parse_activity_date(body.activity_date, now)
+    base = _checked_activity_date(body.activity_date, now)
     doc = {
         "id": str(uuid.uuid4()),
         "client_id": body.client_id,
@@ -1531,7 +1549,7 @@ async def update_event(event_id: str, body: EventUpdate, user=Depends(get_curren
     if created is not None and created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
     if body.activity_date:
-        created = parse_activity_date(body.activity_date, created or now_utc())
+        created = _checked_activity_date(body.activity_date, created or now_utc())
         if ev["type"] == "collection":
             # Come alla creazione: fine giornata (Roma) per saldare fino a quel giorno.
             created = created.astimezone(ROME).replace(hour=23, minute=59, second=59, microsecond=0).astimezone(timezone.utc)

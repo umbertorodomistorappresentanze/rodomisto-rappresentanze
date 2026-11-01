@@ -3,6 +3,7 @@ import { dmyDate } from "@/src/format";
 type LastActionDates = {
   last_visit_at?: string | null;
   last_order_at?: string | null;
+  last_order_company?: string | null;
   last_collection_at?: string | null;
 };
 
@@ -25,7 +26,9 @@ export function lastActionLabel(d: LastActionDates): string {
   if (items.length === 0) return "Mai visitato";
   items.sort((a, b) => b.ts - a.ts);
   const top = items[0];
-  if (top.kind === "order") return `Ordine effettuato il ${dmyDate(top.at)}`;
+  if (top.kind === "order") {
+    return `Ordine effettuato il ${dmyDate(top.at)}${d.last_order_company ? ` - ${d.last_order_company}` : ""}`;
+  }
   if (top.kind === "collection") return `Incassato il ${dmyDate(top.at)}`;
   return `Ultima visita il ${dmyDate(top.at)}`;
 }

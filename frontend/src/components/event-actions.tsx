@@ -68,8 +68,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
     if (busy) return;
     let payload: any = null;
     if (isOrder) {
-      if (!mode) return;
-      payload = { payment_mode: mode, activity_date: toISODate(colDate) };
+      payload = { activity_date: toISODate(colDate), ...(mode ? { payment_mode: mode } : {}) };
     } else if (isCollection) {
       payload = {
         activity_date: toISODate(colDate),

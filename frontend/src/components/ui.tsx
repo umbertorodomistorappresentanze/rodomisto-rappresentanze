@@ -33,11 +33,13 @@ export function AppText(props: {
   style?: StyleProp<TextStyle>;
   weight?: keyof typeof fonts;
   numberOfLines?: number;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   const family = fonts[props.weight ?? "regular"];
   return (
     <Text
+      testID={props.testID}
       numberOfLines={props.numberOfLines}
       style={[{ fontFamily: family, color: colors.onSurface }, props.style]}
     >

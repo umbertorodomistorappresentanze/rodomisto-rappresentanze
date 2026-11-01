@@ -329,3 +329,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Da gestire: rimosso pulsante 'Gestito'; tap riga apre azioni complete; gestito solo con ordine/incasso/nota nel mese (visite e rinvii non contano).
 - Ricorrenze: periodi Natale 09-01→12-31, Pasqua 02-01→05-31; ordini reali del marchio nel periodo = Gestiti automatico (order_auto). Badge SOSPESO nel giro e in Da gestire.
 - Ricorrenze: spunte manuali valide solo nel periodo (e bloccate fuori periodo); nomi lunghi a capo.
+- Date ordini: campo data accetta G/M/AA(AA), niente riscrittura durante la digitazione, errori per date future/non valide (anche backend 400). Pill cliente: 'Ordine effettuato il GG/MM/AAAA - Mandante' (last_order_company).
