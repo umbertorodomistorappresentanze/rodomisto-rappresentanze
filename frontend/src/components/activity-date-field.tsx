@@ -31,6 +31,24 @@ function parse(text: string, allowShortYear = true): Date | null {
   if (d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
   return d;
 }
+/** Maschera di digitazione: accetta solo cifre e inserisce da sola le "/"
+ *  (es. 12102026 -> 12/10/2026). Necessario perché sui telefoni la tastiera
+ *  numerica spesso non ha il tasto "/" e la data veniva scartata. */
+function maskDate(raw: string): string {
+  if (/[/.-]/.test(raw)) {
+    // l'utente scrive anche i separatori (es. 1/10/2026): completiamo solo
+    // la seconda "/" se manca (12/102 -> 12/10/2)
+    const parts = raw.split(/[/.-]/);
+    if (parts.length === 2 && parts[1].length > 2) {
+      return `${parts[0]}/${parts[1].slice(0, 2)}/${parts[1].slice(2, 6)}`;
+    }
+    return raw.slice(0, 10);
+  }
+  const d = raw.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -93,8 +111,11 @@ export function ActivityDateField({
           <TextInput
             testID="activity-date-input"
             value={text}
-            onChangeText={(t) => {
+            onChangeText={(raw) => {
+              // cancellazione di un solo carattere: non rimettiamo subito la "/"
+              const t = raw.length === text.length - 1 ? raw : maskDate(raw);
               setText(t);
+              setError(null);
               // Durante la digitazione accettiamo solo l'anno a 4 cifre
               // (es. "05/10/20" non deve diventare 2020 mentre si scrive 2026).
               const p = parse(t, false);
@@ -106,7 +127,8 @@ export function ActivityDateField({
             onFocus={() => { focused.current = true; }}
             onBlur={() => {
               focused.current = false;
-              const p = parse(text);
+              const digits = text.replace(/\D/g, "");
+              const p = parse(text) ?? (digits.length === 6 || digits.length === 8 ? parse(maskDate(digits)) : null);
               if (!p) {
                 setError("Data non valida: usa GG/MM/AAAA. Resta impostato il " + fmt(value));
                 setText(fmt(value));
@@ -121,7 +143,10 @@ export function ActivityDateField({
             }}
             placeholder="GG/MM/AAAA"
             placeholderTextColor={colors.muted}
-            keyboardType="numbers-and-punctuation"
+            keyboardType="number-pad"
+            inputMode="numeric"
+            maxLength={10}
+            selectTextOnFocus
             style={styles.input}
           />
         </View>

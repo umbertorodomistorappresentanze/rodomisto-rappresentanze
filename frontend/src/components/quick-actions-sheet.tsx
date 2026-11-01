@@ -405,7 +405,7 @@ export const QuickActionsSheet = forwardRef<
               <View style={[styles.footerBar, { paddingBottom: insets.bottom + spacing.md }]}>
                 <Button
                   testID="order-confirm"
-                  title="Conferma e Registra"
+                  title={`Registra ordine del ${activityDate.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })}`}
                   loading={busy}
                   disabled={!orderPaymentMode}
                   onPress={() => {
