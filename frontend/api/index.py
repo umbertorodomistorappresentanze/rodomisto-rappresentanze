@@ -588,6 +588,39 @@ async def seed():
 
     await seed_recurrences()
     await import_clients_ott26()
+    await fix_goose_order_dates()
+
+
+async def fix_goose_order_dates():
+    """Una tantum: (1) ricalcola la data degli ordini GooseApp dalla data
+    documento salvata nel record (prima, se non letta, veniva usata la data
+    della sincronizzazione); (2) unisce i doppioni con ordini inseriti a mano
+    (stesso cliente e mandante, ±30 gg) mantenendo la data dell'utente."""
+    key = "goose_order_dates_fix_v1"
+    if await db.app_meta.find_one({"key": key}):
+        return
+    cfg = await db.goose_config.find_one({"id": "config"}, {"_id": 0}) or {}
+    fixed = merged = 0
+    async for e in db.events.find({"source": "gooseapp", "type": "order", "deleted_at": None}, {"_id": 0}):
+        created = _utc(e["created_at"])
+        rec = e.get("goose_record") or {}
+        d = _goose_record_date(rec, cfg.get("field_date") or "") if rec else None
+        if d and d.date() != created.date():
+            days = PAYMENT_MODES.get(e.get("payment_mode") or "", {}).get("days")
+            await db.events.update_one({"id": e["id"]}, {"$set": {
+                "created_at": d, "due_at": (d + timedelta(days=days)) if days else e.get("due_at")}})
+            created = d
+            fixed += 1
+        twin = await _find_manual_twin(e["client_id"], e.get("company_id"), e.get("company_name"), created)
+        if twin:
+            await db.events.update_one({"id": twin["id"]}, {"$set": {
+                "goose_order_id": e.get("goose_order_id"), "goose_company_code": e.get("goose_company_code"),
+                "order_number": twin.get("order_number") or e.get("order_number"),
+                "ship_label": twin.get("ship_label") or e.get("ship_label")}})
+            await db.events.update_one({"id": e["id"]}, {"$set": {"deleted_at": now_utc(), "merged_into": twin["id"]}})
+            merged += 1
+    await db.app_meta.insert_one({"key": key, "at": now_utc(), "fixed": fixed, "merged": merged})
+    logger.info("Fix date ordini GooseApp: %d date corrette, %d doppioni uniti", fixed, merged)
 
 
 async def import_clients_ott26():
@@ -2275,16 +2308,81 @@ def _norm_piva(raw) -> str:
     return s
 
 
+_GOOSE_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+    "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y",
+    "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%Y/%m/%d",
+)
+
+
 def _parse_goose_date(raw) -> Optional[datetime]:
-    if not raw:
+    """Data documento GooseApp -> mezzogiorno (Roma) del giorno indicato.
+    Supporta i formati più comuni (ISO, GG/MM/AAAA, AAAAMMGG...)."""
+    if raw is None or raw == "":
         return None
-    s = str(raw).strip().replace("T", " ")
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(s[:len(fmt) + 2], fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
+    if isinstance(raw, datetime):
+        d = raw
+    else:
+        s = str(raw).strip().replace("T", " ").split(".")[0] if "-" in str(raw)[:5] else str(raw).strip().replace("T", " ")
+        s = s.rstrip("Z")
+        d = None
+        for fmt in _GOOSE_DATE_FORMATS:
+            try:
+                d = datetime.strptime(s, fmt)
+                break
+            except ValueError:
+                continue
+        if d is None:
+            m = re.match(r"^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})", s)
+            if not m or m.group(1) == s:
+                return None
+            return _parse_goose_date(m.group(1))
+    if d.year < 2000:
+        return None
+    return datetime(d.year, d.month, d.day, 12, 0, tzinfo=ROME).astimezone(timezone.utc)
+
+
+def _goose_record_date(rec: dict, field: str) -> Optional[datetime]:
+    """Data dell'ordine dal record: campo configurato, altrimenti il primo
+    campo data riconoscibile (DTDAT, DTDOC, DATA...)."""
+    if field:
+        d = _parse_goose_date(rec.get(field))
+        if d:
+            return d
+    for k in ("DTDAT", "DTDOC", "DTDATA", "DATA", "DATA_DOC", "DATADOC", "DTORD"):
+        for rk, v in rec.items():
+            if str(rk).upper() == k:
+                d = _parse_goose_date(v)
+                if d:
+                    return d
+    for rk, v in rec.items():
+        if "DAT" in str(rk).upper() and "INS" not in str(rk).upper() and "MOD" not in str(rk).upper():
+            d = _parse_goose_date(v)
+            if d:
+                return d
     return None
+
+
+def _utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+async def _find_manual_twin(client_id: str, company_id: Optional[str], company_name: Optional[str], when: datetime):
+    """Ordine inserito a mano (stesso cliente e mandante, ±30 giorni) che
+    corrisponde all'ordine GooseApp: in quel caso NON si duplica e si
+    mantiene la data dell'attività inserita dall'utente."""
+    if not (company_id or company_name):
+        return None
+    q = {"client_id": client_id, "type": "order", "deleted_at": None,
+         "source": {"$ne": "gooseapp"}, "goose_order_id": None,
+         "created_at": {"$gte": when - timedelta(days=30), "$lte": when + timedelta(days=30)}}
+    q["$or"] = ([{"company_id": company_id}] if company_id else []) + \
+        ([{"company_name": company_name}] if company_name else [])
+    best = None
+    async for e in db.events.find(q, {"_id": 0}):
+        if not best or abs((_utc(e["created_at"]) - when).total_seconds()) < abs((_utc(best["created_at"]) - when).total_seconds()):
+            best = e
+    return best
 
 
 def _clean_doc_number(raw) -> str:
@@ -2424,7 +2522,7 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
             if not is_admin and cli.get("agent") != actor["username"]:
                 continue
             site = _match_site(cli, str(rec.get(cfg.get("field_site") or "") or ""))
-            created = _parse_goose_date(rec.get(cfg.get("field_date") or "")) or now_utc()
+            created = _goose_record_date(rec, cfg.get("field_date") or "") or now_utc()
             company_code = str(rec.get(cfg.get("field_company") or "") or "").strip()
             company_id, company_name = await _resolve_mandante(
                 company_code, man_map, man_lookup, comp_map, comp_by_id, companies)
@@ -2477,6 +2575,17 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
                 "created_at": created,
                 "deleted_at": None,
             }
+            twin = await _find_manual_twin(cli["id"], company_id, company_name, created)
+            if twin:
+                # Ordine già inserito a mano: si collega a GooseApp senza
+                # duplicarlo e mantenendo la "Data dell'attività" dell'utente.
+                await db.events.update_one({"id": twin["id"]}, {"$set": {
+                    "goose_order_id": oid or None, "goose_company_code": company_code or None,
+                    "order_number": twin.get("order_number") or order_number or None,
+                    "ship_label": twin.get("ship_label") or ship_label or None,
+                    "goose_record": doc["goose_record"]}})
+                skipped += 1
+                continue
             await db.events.insert_one(doc)
             imported += 1
             details.append({"order_id": oid, "client": cli.get("ragione_sociale"),
