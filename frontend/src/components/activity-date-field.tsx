@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { CalendarBlank } from "phosphor-react-native";
@@ -74,6 +74,7 @@ export function ActivityDateField({
   const [showPicker, setShowPicker] = useState(false);
   const [text, setText] = useState(fmt(value));
   const [error, setError] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
 
   const focused = useRef(false);
 
@@ -105,11 +106,50 @@ export function ActivityDateField({
           );
         })}
       </View>
-      {Platform.OS === "web" ? (
+      {Platform.OS === "web" && !typing ? (
+        <View>
+          <View style={styles.inputRow} testID="activity-date-calendar">
+            <CalendarBlank size={18} color={colors.brand} weight="bold" />
+            <AppText weight="semibold" style={styles.pickText}>{fmt(value)}</AppText>
+            <AppText weight="semibold" style={styles.calHint}>Apri calendario</AppText>
+            {/* Calendario nativo del browser/telefono: input date trasparente sopra la casella */}
+            {createElement("input", {
+              type: "date",
+              "data-testid": "activity-date-native",
+              "aria-label": "Apri calendario",
+              value: toISODate(value),
+              max: toISODate(new Date()),
+              onClick: (e: any) => { setError(null); try { e.currentTarget.showPicker?.(); } catch { /* non supportato */ } },
+              onChange: (e: any) => {
+                const v: string = e.target.value;
+                if (!v) return;
+                const [y, m, d] = v.split("-").map(Number);
+                const picked = new Date(y, m - 1, d);
+                if (picked.getTime() > startOfDay(new Date()).getTime()) {
+                  setError("La data non può essere futura.");
+                  return;
+                }
+                setError(null);
+                onChange(startOfDay(picked));
+              },
+              style: {
+                position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+                opacity: 0.011, cursor: "pointer", border: 0, padding: 0, margin: 0,
+                fontSize: 16, colorScheme: "light",
+              },
+            })}
+          </View>
+          <Pressable testID="activity-date-type" onPress={() => setTyping(true)} hitSlop={8} style={styles.linkBtn}>
+            <AppText weight="semibold" style={styles.link}>Oppure digita la data a mano</AppText>
+          </Pressable>
+        </View>
+      ) : Platform.OS === "web" ? (
+        <View>
         <View style={styles.inputRow}>
           <CalendarBlank size={18} color={colors.muted} weight="bold" />
           <TextInput
             testID="activity-date-input"
+            autoFocus
             value={text}
             onChangeText={(raw) => {
               // cancellazione di un solo carattere: non rimettiamo subito la "/"
@@ -150,6 +190,10 @@ export function ActivityDateField({
             style={styles.input}
           />
         </View>
+          <Pressable testID="activity-date-use-calendar" onPress={() => setTyping(false)} hitSlop={8} style={styles.linkBtn}>
+            <AppText weight="semibold" style={styles.link}>Usa il calendario</AppText>
+          </Pressable>
+        </View>
       ) : (
         <>
           <Pressable testID="activity-date-pick" onPress={() => setShowPicker(true)} style={styles.inputRow}>
@@ -159,6 +203,8 @@ export function ActivityDateField({
           {showPicker ? (
             <DateTimePicker
               mode="date"
+              display={Platform.OS === "ios" ? "inline" : "calendar"}
+              locale="it-IT"
               value={value}
               maximumDate={new Date()}
               onChange={(_e, date) => {
@@ -188,6 +234,9 @@ function makeStyles(c: ReturnType<typeof useTheme>["colors"]) {
     },
     label: { fontSize: 13, color: c.onSurfaceTertiary },
     error: { fontSize: 12, color: c.error },
+    calHint: { marginLeft: "auto", fontSize: 12, color: c.brand },
+    linkBtn: { alignSelf: "flex-start", paddingVertical: spacing.xs, marginTop: 2 },
+    link: { fontSize: 12, color: c.brand, textDecorationLine: "underline" },
     selected: { fontSize: 12, color: c.onSurfaceSecondary },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
     chip: {
