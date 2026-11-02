@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PencilSimple, Trash, X } from "phosphor-react-native";
 
@@ -34,6 +34,7 @@ export function EventActions({ event }: { event: VisitEvent }) {
 
   const [editOpen, setEditOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
+  const [payQuery, setPayQuery] = useState("");
   const [mode, setMode] = useState<string | null>(event.payment_mode ?? null);
   const [method, setMethod] = useState<string | null>(event.collection_method ?? null);
   const [colDate, setColDate] = useState<Date>(new Date());
@@ -45,10 +46,13 @@ export function EventActions({ event }: { event: VisitEvent }) {
     queryFn: () => apiGet<PaymentMode[]>("/payment-modes"),
     enabled: editOpen && isOrder,
   });
+  const normQ = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const filteredModes = (pmQuery.data ?? []).filter((pm) => !payQuery.trim() || normQ(pm.label).includes(normQ(payQuery)));
 
   if (!canEdit && !canDelete) return null;
 
   function openEdit() {
+    setPayQuery("");
     setMode(event.payment_mode ?? null);
     setMethod(event.collection_method ?? null);
     setColDate(event.created_at ? new Date(event.created_at) : new Date());
@@ -149,8 +153,18 @@ export function EventActions({ event }: { event: VisitEvent }) {
                 <>
                 <ActivityDateField value={colDate} onChange={setColDate} label="Data ordine" />
                 <AppText weight="medium" style={styles.sheetSub}>Termini di pagamento</AppText>
+                <TextInput
+                  testID="ev-pay-search"
+                  value={payQuery}
+                  onChangeText={setPayQuery}
+                  placeholder="Cerca modalità..."
+                  placeholderTextColor={colors.muted}
+                  autoCorrect={false}
+                  style={styles.paySearch}
+                />
                 <View style={styles.chips}>
-                  {(pmQuery.data ?? []).map((pm) => {
+                  {filteredModes.length === 0 ? <AppText style={styles.sheetSub}>Nessuna modalità trovata</AppText> : null}
+                  {filteredModes.map((pm) => {
                     const on = mode === pm.key;
                     return (
                       <Pressable
@@ -232,6 +246,10 @@ function makeStyles(c: ReturnType<typeof useTheme>["colors"]) {
     sheetSub: { fontSize: 13, color: c.muted },
     closeBtn: { width: 36, height: 36, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+    paySearch: {
+      borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary, borderRadius: radius.md,
+      paddingHorizontal: spacing.md, minHeight: 44, fontSize: 15, color: c.onSurface,
+    },
     chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
     chipOn: { backgroundColor: c.brand, borderColor: c.brand },
     chipText: { fontSize: 14, color: c.onSurface },

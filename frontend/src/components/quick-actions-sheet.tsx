@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "reac
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetView } from "@gorhom/bottom-sheet";
+import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ArrowBendUpLeft,
@@ -58,6 +58,7 @@ export const QuickActionsSheet = forwardRef<
   const [orderCompany, setOrderCompany] = useState<Company | null>(null);
   const [orderPaymentMode, setOrderPaymentMode] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
+  const [payQuery, setPayQuery] = useState("");
   const [activityDate, setActivityDate] = useState<Date>(new Date());
   const [companyQuery, setCompanyQuery] = useState("");
   const insets = useSafeAreaInsets();
@@ -77,6 +78,7 @@ export const QuickActionsSheet = forwardRef<
       setOrderCompany(null);
       setOrderPaymentMode(null);
       setPayOpen(false);
+      setPayQuery("");
       setActivityDate(new Date());
       setCompanyQuery("");
       modalRef.current?.present();
@@ -150,6 +152,10 @@ export const QuickActionsSheet = forwardRef<
     );
   }
 
+  const filteredPayModes = payQuery.trim()
+    ? paymentModes.filter((pm) => normQ(pm.label).includes(normQ(payQuery)))
+    : paymentModes;
+
   function renderNoCompanies() {
     return filteredCompanies.length === 0 ? (
       <AppText style={styles.hint}>Nessuna azienda trovata per &quot;{companyQuery}&quot;</AppText>
@@ -220,7 +226,9 @@ export const QuickActionsSheet = forwardRef<
         <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
       )}
     >
-      <BottomSheetView style={styles.container}>
+      {/* View normale: BottomSheetView è posizionata in assoluto e non limita
+          l'altezza, quindi le liste lunghe non scorrevano. */}
+      <View style={styles.container}>
         <Header
           title={
             mode === "main"
@@ -340,7 +348,7 @@ export const QuickActionsSheet = forwardRef<
 
         {mode === "order" ? (
           <View style={{ flex: 1, minHeight: 0 }}>
-            <BottomSheetScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.lg, gap: spacing.sm }} showsVerticalScrollIndicator>
+            <BottomSheetScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.xl * 4, gap: spacing.sm }} showsVerticalScrollIndicator>
               {!orderCompany ? (
                 <>
                   <AppText style={styles.hint}>Seleziona l&apos;azienda dell&apos;ordine</AppText>
@@ -359,7 +367,7 @@ export const QuickActionsSheet = forwardRef<
                 </>
               ) : (
                 <>
-                  <Pressable testID="order-back" onPress={() => { setOrderCompany(null); setOrderPaymentMode(null); setPayOpen(false); }} style={styles.backLink}>
+                  <Pressable testID="order-back" onPress={() => { setOrderCompany(null); setOrderPaymentMode(null); setPayOpen(false); setPayQuery(""); }} style={styles.backLink}>
                     <CaretLeft size={16} color={colors.brand} weight="bold" />
                     <AppText weight="semibold" style={styles.backLinkText}>Azienda: {orderCompany.name}</AppText>
                   </Pressable>
@@ -381,13 +389,33 @@ export const QuickActionsSheet = forwardRef<
                   </Pressable>
                   {payOpen ? (
                     <View style={styles.dropdown}>
-                      {paymentModes.map((pm) => {
+                      <View style={[styles.searchRow, styles.paySearch]}>
+                        <MagnifyingGlass size={16} color={colors.muted} weight="bold" />
+                        <TextInput
+                          testID="pay-search"
+                          value={payQuery}
+                          onChangeText={setPayQuery}
+                          placeholder="Cerca modalità..."
+                          placeholderTextColor={colors.muted}
+                          autoCorrect={false}
+                          style={styles.searchInput}
+                        />
+                        {payQuery ? (
+                          <Pressable testID="pay-search-clear" onPress={() => setPayQuery("")} hitSlop={8}>
+                            <X size={14} color={colors.muted} weight="bold" />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      {filteredPayModes.length === 0 ? (
+                        <AppText style={[styles.hint, { padding: spacing.md }]}>Nessuna modalità trovata</AppText>
+                      ) : null}
+                      {filteredPayModes.map((pm) => {
                         const on = orderPaymentMode === pm.key;
                         return (
                           <Pressable
                             key={pm.key}
                             testID={`order-pay-${pm.key}`}
-                            onPress={() => { setOrderPaymentMode(pm.key); setPayOpen(false); }}
+                            onPress={() => { setOrderPaymentMode(pm.key); setPayOpen(false); setPayQuery(""); }}
                             style={[styles.option, on && styles.optionOn]}
                           >
                             <AppText weight={on ? "bold" : "medium"} style={[styles.optionText, on && { color: colors.brand }]}>
@@ -532,7 +560,7 @@ export const QuickActionsSheet = forwardRef<
             />
           </View>
         ) : null}
-      </BottomSheetView>
+      </View>
     </BottomSheetModal>
   );
 });
@@ -545,6 +573,7 @@ function makeSheetStyles(c: ReturnType<typeof useTheme>["colors"]) {
       backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,
       borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 46, marginBottom: spacing.sm,
     },
+    paySearch: { margin: spacing.sm, marginBottom: spacing.xs },
     searchInput: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: c.onSurface, paddingVertical: 0 },
     header: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingBottom: spacing.lg },
     title: { fontSize: 20, color: c.onSurface },

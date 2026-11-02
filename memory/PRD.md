@@ -333,3 +333,5 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Fix data ordini: GooseApp data documento letta in molti formati + rilevamento automatico campo data (DTDAT/DTDOC/DATA...); ordini GooseApp che corrispondono a un ordine manuale (stesso cliente+mandante ±30gg) vengono uniti mantenendo la data utente; migrazione una tantum goose_order_dates_fix_v1.
 - Campo data: maschera cifre (12102026→12/10/2026), tastiera numerica, 6 cifre su blur; pulsante 'Registra ordine del GG/MM/AAAA'.
 - Campo data: su web casella con <input type=date> trasparente (calendario nativo) + link 'Oppure digita la data a mano'; su iOS DateTimePicker inline, Android calendario.
+- Ricerca 'Cerca modalità' nel menu pagamento (ordine + modifica ordine).
+- Fix scroll sheet azioni (View al posto di BottomSheetView): liste aziende/pagamenti scorrono, pulsante conferma visibile.
