@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import io
+import json
 import logging
 import os
 import re
@@ -13,8 +16,8 @@ import jwt
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -2861,6 +2864,42 @@ async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_cur
         except gooseapp.GooseError as e:
             raise HTTPException(status_code=502, detail=str(e))
     return await _process_goose_orders(records, cfg, user)
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Business API (Meta Cloud API) – webhook
+# GET  = verifica dell'URL (hub.challenge) con WHATSAPP_VERIFY_TOKEN
+# POST = ricezione notifiche (messaggi/stati): salvate in db.whatsapp_webhooks
+# Esposto sia su /api/webhook (ingress anteprima) sia su /webhook (Render).
+# ---------------------------------------------------------------------------
+async def _whatsapp_verify(request: Request):
+    q = request.query_params
+    expected = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+    if q.get("hub.mode") == "subscribe" and expected and q.get("hub.verify_token") == expected:
+        return PlainTextResponse(q.get("hub.challenge", ""), status_code=200)
+    raise HTTPException(status_code=403, detail="Verifica webhook non riuscita")
+
+
+async def _whatsapp_receive(request: Request):
+    raw = await request.body()
+    secret = os.environ.get("WHATSAPP_APP_SECRET", "")
+    if secret:
+        sig = request.headers.get("X-Hub-Signature-256", "")
+        good = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, good):
+            raise HTTPException(status_code=403, detail="Firma non valida")
+    try:
+        payload = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="JSON non valido")
+    await db.whatsapp_webhooks.insert_one({"id": str(uuid.uuid4()), "received_at": now_utc(), "payload": payload})
+    logger.info("Webhook WhatsApp ricevuto: %s", payload.get("object"))
+    return {"status": "ok"}
+
+
+for _path in ("/api/webhook", "/webhook"):
+    app.add_api_route(_path, _whatsapp_verify, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_path, _whatsapp_receive, methods=["POST"], include_in_schema=False)
 
 
 app.include_router(api)
