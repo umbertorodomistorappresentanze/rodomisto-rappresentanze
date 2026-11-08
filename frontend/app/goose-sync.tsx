@@ -201,6 +201,12 @@ export default function GooseSyncScreen() {
             <AppText weight="bold" style={styles.cardTitle}>Esito ultima sincronizzazione</AppText>
             <View style={styles.resRow}><AppText style={styles.resLabel}>Importati</AppText><AppText weight="bold" style={[styles.resVal, { color: colors.success }]}>{last.imported}</AppText></View>
             <View style={styles.resRow}><AppText style={styles.resLabel}>Duplicati saltati</AppText><AppText weight="bold" style={styles.resVal}>{last.skipped_duplicates}</AppText></View>
+            <View style={styles.resRow}><AppText style={styles.resLabel}>Offerte/preventivi ignorati</AppText><AppText weight="bold" style={styles.resVal} testID="goose-res-offers">{last.skipped_offers ?? 0}</AppText></View>
+            {last.doc_types && Object.keys(last.doc_types).length > 0 ? (
+              <AppText style={styles.resLabel} testID="goose-res-doctypes">
+                Tipi documento trovati: {Object.entries(last.doc_types).map(([k, v]) => `${k} (${v})`).join(", ")}
+              </AppText>
+            ) : null}
             <View style={styles.resRow}><AppText style={styles.resLabel}>Non associati (P.IVA)</AppText><AppText weight="bold" style={[styles.resVal, { color: last.unmatched.length ? colors.warning : colors.onSurface }]}>{last.unmatched.length}</AppText></View>
             <View style={styles.resRow}><AppText style={styles.resLabel}>Errori</AppText><AppText weight="bold" style={[styles.resVal, { color: last.errors.length ? colors.error : colors.onSurface }]}>{last.errors.length}</AppText></View>
             {last.unmatched.length > 0 ? (
@@ -295,6 +301,9 @@ export default function GooseSyncScreen() {
                 <CfgField label="Campo/i indirizzo spedizione / sede di scarico (separati da virgola)" value={config.field_ship ?? ""} onChange={setField("field_ship")} />
                 <CfgField label="Campo modalità di pagamento (attiva i promemoria sospesi)" value={config.field_payment ?? ""} onChange={setField("field_payment")} />
                 <CfgField label="Tabella modalità di pagamento (opzionale, se il campo contiene un ID)" value={config.payment_table ?? ""} onChange={setField("payment_table")} />
+                <CfgField label="Campo tipo documento (ordine / offerta)" value={config.field_doc_type ?? ""} onChange={setField("field_doc_type")} />
+                <CfgField label="Tipi documento da IGNORARE (offerte/preventivi, separati da virgola)" value={config.offer_doc_types ?? ""} onChange={setField("offer_doc_types")} />
+                <CfgField label="Importa SOLO questi tipi (ordini confermati, opzionale)" value={config.order_doc_types ?? ""} onChange={setField("order_doc_types")} />
                 <CfgField label="Tabella destinazioni (opzionale, se il campo spedizione è un ID)" value={config.dest_table ?? ""} onChange={setField("dest_table")} />
                 <CfgField label="Tabella mandanti (opzionale, rilevata in automatico)" value={config.mandanti_table ?? ""} onChange={setField("mandanti_table")} />
                 <Button title="Salva configurazione" onPress={saveConfig} testID="goose-config-save" />

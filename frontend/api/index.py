@@ -591,6 +591,22 @@ async def seed():
     await seed_recurrences()
     await import_clients_ott26()
     await fix_goose_order_dates()
+    await remove_goose_offers()
+
+
+async def remove_goose_offers():
+    """Elimina (soft delete) gli ordini GooseApp già importati che in realtà
+    erano offerte/preventivi. Eseguita a ogni avvio: è idempotente."""
+    cfg = await _goose_config()
+    n = 0
+    async for e in db.events.find({"source": "gooseapp", "type": "order", "deleted_at": None,
+                                   "goose_record": {"$exists": True}}, {"_id": 0, "id": 1, "goose_record": 1}):
+        if _is_goose_offer(e.get("goose_record") or {}, cfg):
+            await db.events.update_one({"id": e["id"]}, {"$set": {"deleted_at": now_utc(), "deleted_reason": "offerta_gooseapp"}})
+            n += 1
+    if n:
+        logger.info("GooseApp: rimosse %d offerte importate per errore come ordini", n)
+    return n
 
 
 async def fix_goose_order_dates():
@@ -2261,6 +2277,9 @@ GOOSE_DEFAULT_CONFIG = {
     "mandanti_table": "",     # tabella mandanti GooseApp (RECORD_ID = IDMAN)
     "field_payment": "",      # campo modalità di pagamento dell'ordine
     "payment_table": "",      # tabella modalità di pagamento (se il campo contiene un ID)
+    "field_doc_type": "DTTIP",  # campo tipo documento (ordine / offerta)
+    "offer_doc_types": "",    # valori tipo documento da IGNORARE (offerte/preventivi), separati da virgola
+    "order_doc_types": "",    # se compilato: importa SOLO questi tipi (ordini confermati)
 }
 
 
@@ -2277,6 +2296,9 @@ class GooseConfigBody(BaseModel):
     mandanti_table: Optional[str] = None
     field_payment: Optional[str] = None
     payment_table: Optional[str] = None
+    field_doc_type: Optional[str] = None
+    offer_doc_types: Optional[str] = None
+    order_doc_types: Optional[str] = None
 
 
 class GooseMandanteBody(BaseModel):
@@ -2423,6 +2445,30 @@ _NAME_KEYS = ("RAGSO", "RAGIONE", "DENOM", "NOME", "DESCR", "DES", "NOM", "RAG")
 _CITY_KEYS = ("LOCALITA", "CITTA", "COMUNE", "LOC", "CIT", "COM")
 
 
+def _goose_doc_type(rec: dict, cfg: dict) -> str:
+    f = (cfg.get("field_doc_type") or "DTTIP").strip()
+    for k, v in (rec or {}).items():
+        if str(k).upper() == f.upper():
+            return str(v or "").strip()
+    return ""
+
+
+def _is_goose_offer(rec: dict, cfg: dict) -> bool:
+    """True se il documento GooseApp è un'OFFERTA/PREVENTIVO (da ignorare).
+    - se 'order_doc_types' è compilato, solo quei tipi sono ordini;
+    - i tipi in 'offer_doc_types' sono sempre esclusi;
+    - in ogni caso escludiamo i tipi che indicano offerte/preventivi/bozze."""
+    t = _goose_doc_type(rec, cfg).upper()
+    allowed = {x.strip().upper() for x in (cfg.get("order_doc_types") or "").split(",") if x.strip()}
+    if allowed:
+        return t not in allowed
+    excluded = {x.strip().upper() for x in (cfg.get("offer_doc_types") or "").split(",") if x.strip()}
+    if t in excluded:
+        return True
+    n = re.sub(r"[^A-Z]", "", t)
+    return n.startswith("OF") or any(w in n for w in ("OFFERT", "PREV", "BOZZ", "QUOT"))
+
+
 def _record_text(rec: dict, prefs) -> str:
     """Primo valore testuale (non numerico/ID) di un record GooseApp il cui nome
     campo contiene una delle chiavi preferite (in ordine di priorità)."""
@@ -2505,9 +2551,16 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
 
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
+    offers, doc_types = 0, {}
     details = []
 
     for rec in records:
+        dt = _goose_doc_type(rec, cfg) or "(vuoto)"
+        doc_types[dt] = doc_types.get(dt, 0) + 1
+        if _is_goose_offer(rec, cfg):
+            # Offerte / preventivi: MAI registrati come ordini
+            offers += 1
+            continue
         oid = str(rec.get(cfg["field_order_id"]) or "").strip()
         piva = _norm_piva(rec.get(cfg["field_piva"]))
         try:
@@ -2601,6 +2654,8 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
         "total": len(records),
         "imported": imported,
         "skipped_duplicates": skipped,
+        "skipped_offers": offers,
+        "doc_types": doc_types,
         "unmatched": unmatched,
         "errors": errors,
         "details": details,
