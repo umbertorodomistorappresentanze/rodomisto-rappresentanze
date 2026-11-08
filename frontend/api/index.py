@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import httpx
 import io
 import json
 import logging
@@ -2894,7 +2895,40 @@ async def _whatsapp_receive(request: Request):
         raise HTTPException(status_code=400, detail="JSON non valido")
     await db.whatsapp_webhooks.insert_one({"id": str(uuid.uuid4()), "received_at": now_utc(), "payload": payload})
     logger.info("Webhook WhatsApp ricevuto: %s", payload.get("object"))
+    # Risposta automatica a ogni messaggio di testo ricevuto
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or (value.get("metadata") or {}).get("phone_number_id")
+            for message in value.get("messages") or []:
+                if message.get("type") != "text":
+                    continue
+                sender = message.get("from")
+                text = (message.get("text") or {}).get("body", "")
+                if sender and phone_number_id:
+                    await _whatsapp_reply(phone_number_id, sender, f"Ho ricevuto il tuo messaggio: {text}")
     return {"status": "ok"}
+
+
+async def _whatsapp_reply(phone_number_id: str, to: str, body: str) -> None:
+    """Invia un messaggio di testo tramite la WhatsApp Cloud API di Meta.
+    Gli errori vengono solo registrati: il webhook risponde sempre 200,
+    altrimenti Meta ripete l'invio della notifica."""
+    token = os.getenv("WHATSAPP_TOKEN", "")
+    if not token:
+        logger.warning("WHATSAPP_TOKEN non impostato: risposta automatica non inviata")
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                f"https://graph.facebook.com/v18.0/{phone_number_id}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}},
+            )
+        if r.status_code >= 400:
+            logger.warning("Risposta WhatsApp non inviata (%s): %s", r.status_code, r.text[:300])
+    except httpx.HTTPError as e:
+        logger.warning("Errore invio risposta WhatsApp: %s", e)
 
 
 for _path in ("/api/webhook", "/webhook"):
