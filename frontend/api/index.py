@@ -1,8 +1,5 @@
-import hashlib
 import hmac
-import httpx
 import io
-import json
 import logging
 import os
 import re
@@ -2871,8 +2868,8 @@ async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_cur
 # WhatsApp Business API (Meta Cloud API) – webhook
 # GET  = verifica dell'URL (hub.challenge) con WHATSAPP_HOOK_TOKEN / VERIFY_TOKEN
 #        (accettato anche WEBHOOK_VERIFY_TOKEN, se già impostato)
-# POST = ricezione notifiche (messaggi/stati): salvate in db.whatsapp_webhooks
-# Esposto sia su /api/webhook (ingress anteprima) sia su /webhook (Render).
+# POST = ricezione notifiche: stampa payload, mittente e testo nei log
+# GET esposto su /api/webhook e /webhook; POST su /webhook (Render).
 # ---------------------------------------------------------------------------
 def _verify_tokens() -> list:
     """Token di verifica accettati (il primo impostato tra le variabili)."""
@@ -2890,63 +2887,31 @@ async def _whatsapp_verify(request: Request):
     raise HTTPException(status_code=403, detail="Verifica webhook non riuscita")
 
 
-async def _whatsapp_receive(request: Request):
-    raw = await request.body()
-    secret = os.environ.get("WHATSAPP_APP_SECRET", "")
-    if secret:
-        sig = request.headers.get("X-Hub-Signature-256", "")
-        good = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, good):
-            raise HTTPException(status_code=403, detail="Firma non valida")
-    try:
-        payload = json.loads(raw or b"{}")
-    except ValueError:
-        print(f"[WhatsApp webhook] payload non JSON: {raw[:500]!r}", flush=True)
-        raise HTTPException(status_code=400, detail="JSON non valido")
-    # Log completo del payload ricevuto da Meta (visibile nei log di Render)
-    print("[WhatsApp webhook] payload ricevuto:\n" + json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
-    await db.whatsapp_webhooks.insert_one({"id": str(uuid.uuid4()), "received_at": now_utc(), "payload": payload})
-    # Risposta automatica a ogni messaggio di testo ricevuto
-    for entry in payload.get("entry") or []:
-        for change in entry.get("changes") or []:
-            value = change.get("value") or {}
-            phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or (value.get("metadata") or {}).get("phone_number_id")
-            for message in value.get("messages") or []:
-                if message.get("type") != "text":
-                    continue
-                sender = message.get("from")
-                text = (message.get("text") or {}).get("body", "")
-                print(f"[WhatsApp webhook] messaggio da {sender}: {text}", flush=True)
-                if sender and phone_number_id:
-                    await _whatsapp_reply(phone_number_id, sender, f"Ho ricevuto il tuo messaggio: {text}")
-                else:
-                    print("[WhatsApp webhook] PHONE_NUMBER_ID mancante: risposta non inviata", flush=True)
-    return {"status": "ok"}
-
-
-async def _whatsapp_reply(phone_number_id: str, to: str, body: str) -> None:
-    """Invia un messaggio di testo tramite la WhatsApp Cloud API di Meta.
-    Gli errori vengono solo registrati: il webhook risponde sempre 200,
-    altrimenti Meta ripete l'invio della notifica."""
-    token = os.getenv("WHATSAPP_TOKEN", "")
-    if not token:
-        print("[WhatsApp webhook] WHATSAPP_TOKEN non impostato: risposta automatica non inviata", flush=True)
-        return
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(
-                f"https://graph.facebook.com/v18.0/{phone_number_id}/messages",
-                headers={"Authorization": f"Bearer {token}"},
-                json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}},
-            )
-        print(f"[WhatsApp webhook] risposta Graph API {r.status_code}: {r.text[:300]}", flush=True)
-    except httpx.HTTPError as e:
-        print(f"[WhatsApp webhook] errore invio risposta: {e}", flush=True)
-
-
 for _path in ("/api/webhook", "/webhook"):
     app.add_api_route(_path, _whatsapp_verify, methods=["GET"], include_in_schema=False)
-    app.add_api_route(_path, _whatsapp_receive, methods=["POST"], include_in_schema=False)
+
+
+@app.post("/webhook")
+async def whatsapp_webhook(request: Request):
+    try:
+        body = await request.json()
+        print("WEBHOOK RICEVUTO:", body)
+
+        entry = body.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+        messages = value.get("messages", [])
+
+        if messages:
+            msg = messages[0]
+            sender_phone = msg.get("from")
+            msg_body = msg.get("text", {}).get("body", "")
+            print(f"Messaggio da {sender_phone}: {msg_body}")
+
+        return {"status": "ok"}
+    except Exception as e:
+        print("ERRORE WEBHOOK:", str(e))
+        return {"status": "ok"}
 
 
 # Healthcheck per UptimeRobot (GET e HEAD su "/")
