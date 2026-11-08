@@ -2869,15 +2869,24 @@ async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_cur
 
 # ---------------------------------------------------------------------------
 # WhatsApp Business API (Meta Cloud API) – webhook
-# GET  = verifica dell'URL (hub.challenge) con WEBHOOK_VERIFY_TOKEN
+# GET  = verifica dell'URL (hub.challenge) con WHATSAPP_HOOK_TOKEN / VERIFY_TOKEN
+#        (accettato anche WEBHOOK_VERIFY_TOKEN, se già impostato)
 # POST = ricezione notifiche (messaggi/stati): salvate in db.whatsapp_webhooks
 # Esposto sia su /api/webhook (ingress anteprima) sia su /webhook (Render).
 # ---------------------------------------------------------------------------
+def _verify_tokens() -> list:
+    """Token di verifica accettati (il primo impostato tra le variabili)."""
+    names = ("WHATSAPP_HOOK_TOKEN", "VERIFY_TOKEN", "WEBHOOK_VERIFY_TOKEN")
+    return [v for v in (os.getenv(n, "") for n in names) if v]
+
+
 async def _whatsapp_verify(request: Request):
     q = request.query_params
-    expected = os.getenv("WEBHOOK_VERIFY_TOKEN", "")
-    if q.get("hub.mode") == "subscribe" and expected and q.get("hub.verify_token") == expected:
-        return PlainTextResponse(q.get("hub.challenge", ""), status_code=200)
+    mode, token, challenge = q.get("hub.mode"), q.get("hub.verify_token"), q.get("hub.challenge", "")
+    accepted = _verify_tokens()
+    print(f"[WhatsApp webhook] verifica GET mode={mode} token_configurato={bool(accepted)}", flush=True)
+    if mode == "subscribe" and token and any(hmac.compare_digest(token, t) for t in accepted):
+        return PlainTextResponse(challenge, status_code=200)
     raise HTTPException(status_code=403, detail="Verifica webhook non riuscita")
 
 
@@ -2892,9 +2901,11 @@ async def _whatsapp_receive(request: Request):
     try:
         payload = json.loads(raw or b"{}")
     except ValueError:
+        print(f"[WhatsApp webhook] payload non JSON: {raw[:500]!r}", flush=True)
         raise HTTPException(status_code=400, detail="JSON non valido")
+    # Log completo del payload ricevuto da Meta (visibile nei log di Render)
+    print("[WhatsApp webhook] payload ricevuto:\n" + json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
     await db.whatsapp_webhooks.insert_one({"id": str(uuid.uuid4()), "received_at": now_utc(), "payload": payload})
-    logger.info("Webhook WhatsApp ricevuto: %s", payload.get("object"))
     # Risposta automatica a ogni messaggio di testo ricevuto
     for entry in payload.get("entry") or []:
         for change in entry.get("changes") or []:
@@ -2905,8 +2916,11 @@ async def _whatsapp_receive(request: Request):
                     continue
                 sender = message.get("from")
                 text = (message.get("text") or {}).get("body", "")
+                print(f"[WhatsApp webhook] messaggio da {sender}: {text}", flush=True)
                 if sender and phone_number_id:
                     await _whatsapp_reply(phone_number_id, sender, f"Ho ricevuto il tuo messaggio: {text}")
+                else:
+                    print("[WhatsApp webhook] PHONE_NUMBER_ID mancante: risposta non inviata", flush=True)
     return {"status": "ok"}
 
 
@@ -2916,7 +2930,7 @@ async def _whatsapp_reply(phone_number_id: str, to: str, body: str) -> None:
     altrimenti Meta ripete l'invio della notifica."""
     token = os.getenv("WHATSAPP_TOKEN", "")
     if not token:
-        logger.warning("WHATSAPP_TOKEN non impostato: risposta automatica non inviata")
+        print("[WhatsApp webhook] WHATSAPP_TOKEN non impostato: risposta automatica non inviata", flush=True)
         return
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -2925,10 +2939,9 @@ async def _whatsapp_reply(phone_number_id: str, to: str, body: str) -> None:
                 headers={"Authorization": f"Bearer {token}"},
                 json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}},
             )
-        if r.status_code >= 400:
-            logger.warning("Risposta WhatsApp non inviata (%s): %s", r.status_code, r.text[:300])
+        print(f"[WhatsApp webhook] risposta Graph API {r.status_code}: {r.text[:300]}", flush=True)
     except httpx.HTTPError as e:
-        logger.warning("Errore invio risposta WhatsApp: %s", e)
+        print(f"[WhatsApp webhook] errore invio risposta: {e}", flush=True)
 
 
 for _path in ("/api/webhook", "/webhook"):

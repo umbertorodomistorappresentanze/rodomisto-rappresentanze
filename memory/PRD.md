@@ -335,6 +335,6 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Campo data: su web casella con <input type=date> trasparente (calendario nativo) + link 'Oppure digita la data a mano'; su iOS DateTimePicker inline, Android calendario.
 - Ricerca 'Cerca modalità' nel menu pagamento (ordine + modifica ordine).
 - Fix scroll sheet azioni (View al posto di BottomSheetView): liste aziende/pagamenti scorrono, pulsante conferma visibile.
-- WhatsApp Business webhook: GET/POST /webhook e /api/webhook (verifica hub.challenge con WEBHOOK_VERIFY_TOKEN; firma X-Hub-Signature-256 opzionale con WHATSAPP_APP_SECRET; payload in db.whatsapp_webhooks).
+- WhatsApp Business webhook: GET/POST /webhook e /api/webhook (verifica hub.challenge con WHATSAPP_HOOK_TOKEN | VERIFY_TOKEN | WEBHOOK_VERIFY_TOKEN; log payload completo; firma X-Hub-Signature-256 opzionale con WHATSAPP_APP_SECRET; payload in db.whatsapp_webhooks).
 - Webhook POST: risposta automatica 'Ho ricevuto il tuo messaggio: [testo]' via graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID o metadata.phone_number_id).
 - Healthcheck GET/HEAD / → {"status":"ok"} (UptimeRobot).
