@@ -2936,6 +2936,12 @@ for _path in ("/api/webhook", "/webhook"):
     app.add_api_route(_path, _whatsapp_receive, methods=["POST"], include_in_schema=False)
 
 
+# Healthcheck per UptimeRobot (GET e HEAD su "/")
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root_health():
+    return {"status": "ok"}
+
+
 app.include_router(api)
 
 
