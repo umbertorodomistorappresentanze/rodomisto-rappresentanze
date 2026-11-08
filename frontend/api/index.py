@@ -1,4 +1,5 @@
 import hmac
+import httpx
 import io
 import logging
 import os
@@ -2868,7 +2869,7 @@ async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_cur
 # WhatsApp Business API (Meta Cloud API) – webhook
 # GET  = verifica dell'URL (hub.challenge) con WHATSAPP_HOOK_TOKEN / VERIFY_TOKEN
 #        (accettato anche WEBHOOK_VERIFY_TOKEN, se già impostato)
-# POST = ricezione notifiche: stampa payload, mittente e testo nei log
+# POST = log payload, salvataggio (archivio + storico cliente), risposta automatica
 # GET esposto su /api/webhook e /webhook; POST su /webhook (Render).
 # ---------------------------------------------------------------------------
 def _verify_tokens() -> list:
@@ -2908,10 +2909,74 @@ async def whatsapp_webhook(request: Request):
             msg_body = msg.get("text", {}).get("body", "")
             print(f"Messaggio da {sender_phone}: {msg_body}")
 
+            # Meta può rimandare la stessa notifica: elaboriamo ogni messaggio una volta sola
+            wa_id = msg.get("id")
+            if wa_id and await db.whatsapp_messages.find_one({"wa_message_id": wa_id}):
+                print(f"Messaggio {wa_id} già elaborato: ignorato")
+                return {"status": "ok"}
+
+            client = await _client_by_phone(sender_phone)
+            await db.whatsapp_messages.insert_one({
+                "id": str(uuid.uuid4()), "wa_message_id": wa_id, "from": sender_phone,
+                "text": msg_body, "type": msg.get("type"), "received_at": now_utc(),
+                "client_id": client["id"] if client else None,
+            })
+            if client:
+                # Storico cliente (non conta come "Gestito": solo ordine/incasso/nota)
+                await db.events.insert_one({
+                    "id": str(uuid.uuid4()), "client_id": client["id"], "type": "whatsapp",
+                    "note_text": msg_body or f"[messaggio {msg.get('type')}]",
+                    "agent": client.get("agent"), "created_by": "whatsapp",
+                    "deleted_at": None, "created_at": now_utc(),
+                })
+                print(f"Messaggio salvato nello storico di {client.get('ragione_sociale')}")
+            else:
+                print(f"Nessun cliente con numero {sender_phone}: messaggio salvato solo nell'archivio WhatsApp")
+
+            if sender_phone and msg.get("type") == "text":
+                phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or value.get("metadata", {}).get("phone_number_id")
+                await _whatsapp_reply(phone_number_id, sender_phone, f"Ho ricevuto il tuo messaggio: {msg_body}")
+
         return {"status": "ok"}
     except Exception as e:
         print("ERRORE WEBHOOK:", str(e))
         return {"status": "ok"}
+
+
+def _phone_key(raw) -> str:
+    """Ultime 9 cifre del numero (ignora +39, spazi, trattini)."""
+    d = re.sub(r"\D", "", str(raw or ""))
+    return d[-9:] if len(d) >= 9 else ""
+
+
+async def _client_by_phone(phone):
+    key = _phone_key(phone)
+    if not key:
+        return None
+    rx = {"$regex": ".*".join(key[-6:]) + "$"}  # pre-filtro sulle ultime cifre
+    cursor = db.clients.find(
+        {"deleted_at": None, "$or": [{"telefono": rx}, {"extra.telefono_cellulare": rx}, {"extra.telefono_ufficio": rx}]},
+        {"_id": 0})
+    async for c in cursor:
+        ex = c.get("extra") or {}
+        if key in (_phone_key(c.get("telefono")), _phone_key(ex.get("telefono_cellulare")), _phone_key(ex.get("telefono_ufficio"))):
+            return c
+    return None
+
+
+async def _whatsapp_reply(phone_number_id, to: str, text: str) -> None:
+    """Risposta al cliente tramite WhatsApp Cloud API (Graph v18.0)."""
+    token = os.getenv("WHATSAPP_TOKEN", "")
+    if not token or not phone_number_id:
+        print("Risposta non inviata: WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID mancante")
+        return
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(
+            f"https://graph.facebook.com/v18.0/{phone_number_id}/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}},
+        )
+    print(f"Risposta Graph API {r.status_code}: {r.text[:300]}")
 
 
 # Healthcheck per UptimeRobot (GET e HEAD su "/")

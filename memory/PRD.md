@@ -336,5 +336,5 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Ricerca 'Cerca modalità' nel menu pagamento (ordine + modifica ordine).
 - Fix scroll sheet azioni (View al posto di BottomSheetView): liste aziende/pagamenti scorrono, pulsante conferma visibile.
 - WhatsApp Business webhook: GET/POST /webhook e /api/webhook (verifica hub.challenge con WHATSAPP_HOOK_TOKEN | VERIFY_TOKEN | WEBHOOK_VERIFY_TOKEN; log payload completo; firma X-Hub-Signature-256 opzionale con WHATSAPP_APP_SECRET; payload in db.whatsapp_webhooks).
-- Webhook POST /webhook: implementazione semplice richiesta dall utente (print payload, mittente, testo; sempre 200). Risposta automatica rimossa.
+- Webhook POST /webhook: log payload, dedup per wa_message_id, archivio db.whatsapp_messages, evento "whatsapp" nello storico del cliente trovato per telefono (ultime 9 cifre; non conta come Gestito), risposta automatica Graph v18.0 (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID o metadata).
 - Healthcheck GET/HEAD / → {"status":"ok"} (UptimeRobot).
