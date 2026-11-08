@@ -2868,13 +2868,13 @@ async def goose_sync(body: GooseSyncBody = GooseSyncBody(), user=Depends(get_cur
 
 # ---------------------------------------------------------------------------
 # WhatsApp Business API (Meta Cloud API) – webhook
-# GET  = verifica dell'URL (hub.challenge) con WHATSAPP_VERIFY_TOKEN
+# GET  = verifica dell'URL (hub.challenge) con WEBHOOK_VERIFY_TOKEN
 # POST = ricezione notifiche (messaggi/stati): salvate in db.whatsapp_webhooks
 # Esposto sia su /api/webhook (ingress anteprima) sia su /webhook (Render).
 # ---------------------------------------------------------------------------
 async def _whatsapp_verify(request: Request):
     q = request.query_params
-    expected = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+    expected = os.getenv("WEBHOOK_VERIFY_TOKEN", "")
     if q.get("hub.mode") == "subscribe" and expected and q.get("hub.verify_token") == expected:
         return PlainTextResponse(q.get("hub.challenge", ""), status_code=200)
     raise HTTPException(status_code=403, detail="Verifica webhook non riuscita")
