@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { Modal, Pressable, TextInput, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, MagicWand, Storefront, Warning } from "phosphor-react-native";
+import { CheckCircle, MagicWand, Storefront, Trash, Warning } from "phosphor-react-native";
 
-import { apiGet, apiPost, apiPut, Company, GooseAutoResult, GooseMandante } from "@/src/api";
+import { apiDelete, apiGet, apiPost, apiPut, Company, GooseAutoResult, GooseMandante } from "@/src/api";
 import { AppText, Button } from "@/src/components/ui";
 import { useToast } from "@/src/components/toast";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -17,6 +17,7 @@ export function GooseMandanti() {
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [toDelete, setToDelete] = useState<GooseMandante | null>(null);
 
   const listQuery = useQuery({ queryKey: ["goose-mandanti"], queryFn: () => apiGet<GooseMandante[]>("/goose/mandanti") });
   const compQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiGet<Company[]>("/companies") });
@@ -40,6 +41,22 @@ export function GooseMandanti() {
       refresh();
     } catch (e: any) {
       toast(e?.detail || "Salvataggio non riuscito", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!toDelete) return;
+    setBusy(true);
+    try {
+      const r = await apiDelete<{ deleted_orders: number }>(`/goose/mandanti/${encodeURIComponent(toDelete.code)}`);
+      toast(`Codice eliminato · ${r.deleted_orders} ordini rimossi`, "success");
+      setToDelete(null);
+      setOpenCode(null);
+      refresh();
+    } catch (e: any) {
+      toast(e?.detail || "Eliminazione non riuscita", "error");
     } finally {
       setBusy(false);
     }
@@ -77,6 +94,7 @@ export function GooseMandanti() {
         const open = openCode === r.code;
         return (
           <View key={r.code} style={styles.row}>
+            <View style={styles.rowLine}>
             <Pressable testID={`mandante-${r.code}`} onPress={() => { setOpenCode(open ? null : r.code); setQ(""); }} style={styles.rowHead}>
               {r.company_id
                 ? <CheckCircle size={18} color={colors.success} weight="fill" />
@@ -88,6 +106,16 @@ export function GooseMandanti() {
                 </AppText>
               </View>
             </Pressable>
+              <Pressable
+                testID={`mandante-delete-${r.code}`}
+                accessibilityLabel={`Elimina codice ${r.code}`}
+                onPress={() => setToDelete(r)}
+                hitSlop={6}
+                style={styles.trashBtn}
+              >
+                <Trash size={18} color={colors.error} weight="bold" />
+              </Pressable>
+            </View>
             {open ? (
               <View style={styles.picker}>
                 <TextInput
@@ -120,6 +148,24 @@ export function GooseMandanti() {
           </View>
         );
       })}
+      <Modal visible={!!toDelete} transparent animationType="fade" onRequestClose={() => setToDelete(null)}>
+        <View style={styles.backdrop}>
+          <View style={styles.dialog} testID="mandante-delete-dialog">
+            <AppText weight="bold" style={styles.title}>Eliminare il codice mandante?</AppText>
+            <AppText style={styles.hint}>
+              Verranno eliminati il codice {toDelete?.code} e {toDelete?.orders ?? 0} ordini importati da GooseApp collegati. Gli ordini eliminati non verranno reimportati.
+            </AppText>
+            <View style={styles.dialogBtns}>
+              <Pressable testID="mandante-delete-cancel" onPress={() => setToDelete(null)} style={styles.cancelBtn}>
+                <AppText weight="semibold" style={{ color: colors.onSurface }}>Annulla</AppText>
+              </Pressable>
+              <Pressable testID="mandante-delete-confirm" disabled={busy} onPress={confirmDelete} style={styles.deleteBtn}>
+                <AppText weight="semibold" style={{ color: "#FFFFFF" }}>{busy ? "Elimino…" : "Elimina"}</AppText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -129,7 +175,14 @@ const useStyles = makeStyles((c) => ({
   title: { fontSize: 15, color: c.onSurface },
   hint: { fontSize: 12, color: c.muted, lineHeight: 18 },
   row: { borderTopWidth: 1, borderTopColor: c.divider, paddingTop: spacing.sm, gap: spacing.sm },
-  rowHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 44 },
+  rowLine: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  rowHead: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 44 },
+  trashBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.md },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  dialog: { width: "100%", maxWidth: 420, backgroundColor: c.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
+  dialogBtns: { flexDirection: "row", justifyContent: "flex-end", gap: spacing.sm },
+  cancelBtn: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radius.md, borderWidth: 1, borderColor: c.border },
+  deleteBtn: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radius.md, backgroundColor: c.error },
   code: { fontSize: 14, color: c.onSurface },
   sub: { fontSize: 12, color: c.muted },
   picker: { gap: spacing.sm, backgroundColor: c.surfaceSecondary, borderRadius: radius.md, padding: spacing.sm },

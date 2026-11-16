@@ -202,6 +202,7 @@ export default function GooseSyncScreen() {
             <View style={styles.resRow}><AppText style={styles.resLabel}>Importati</AppText><AppText weight="bold" style={[styles.resVal, { color: colors.success }]}>{last.imported}</AppText></View>
             <View style={styles.resRow}><AppText style={styles.resLabel}>Duplicati saltati</AppText><AppText weight="bold" style={styles.resVal}>{last.skipped_duplicates}</AppText></View>
             <View style={styles.resRow}><AppText style={styles.resLabel}>Offerte/preventivi ignorati</AppText><AppText weight="bold" style={styles.resVal} testID="goose-res-offers">{last.skipped_offers ?? 0}</AppText></View>
+            <View style={styles.resRow}><AppText style={styles.resLabel}>Ordini precedenti alla data di inizio</AppText><AppText weight="bold" style={styles.resVal} testID="goose-res-old">{last.skipped_before_date ?? 0}</AppText></View>
             {last.doc_types && Object.keys(last.doc_types).length > 0 ? (
               <AppText style={styles.resLabel} testID="goose-res-doctypes">
                 Tipi documento trovati: {Object.entries(last.doc_types).map(([k, v]) => `${k} (${v})`).join(", ")}
@@ -304,6 +305,7 @@ export default function GooseSyncScreen() {
                 <CfgField label="Campo tipo documento (ordine / offerta)" value={config.field_doc_type ?? ""} onChange={setField("field_doc_type")} />
                 <CfgField label="Tipi documento da IGNORARE (offerte/preventivi, separati da virgola)" value={config.offer_doc_types ?? ""} onChange={setField("offer_doc_types")} />
                 <CfgField label="Importa SOLO questi tipi (ordini confermati, opzionale)" value={config.order_doc_types ?? ""} onChange={setField("order_doc_types")} />
+                <CfgField label="Importa ordini a partire dalla data (GG/MM/AAAA)" value={config.import_from_date ?? "01/01/2025"} onChange={setField("import_from_date")} />
                 <CfgField label="Tabella destinazioni (opzionale, se il campo spedizione è un ID)" value={config.dest_table ?? ""} onChange={setField("dest_table")} />
                 <CfgField label="Tabella mandanti (opzionale, rilevata in automatico)" value={config.mandanti_table ?? ""} onChange={setField("mandanti_table")} />
                 <Button title="Salva configurazione" onPress={saveConfig} testID="goose-config-save" />

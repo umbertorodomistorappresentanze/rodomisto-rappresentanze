@@ -2278,6 +2278,7 @@ GOOSE_DEFAULT_CONFIG = {
     "field_payment": "",      # campo modalità di pagamento dell'ordine
     "payment_table": "",      # tabella modalità di pagamento (se il campo contiene un ID)
     "field_doc_type": "DTTIP",  # campo tipo documento (ordine / offerta)
+    "import_from_date": "01/01/2025",  # ignora ordini con data documento precedente
     "offer_doc_types": "",    # valori tipo documento da IGNORARE (offerte/preventivi), separati da virgola
     "order_doc_types": "",    # se compilato: importa SOLO questi tipi (ordini confermati)
 }
@@ -2297,6 +2298,7 @@ class GooseConfigBody(BaseModel):
     field_payment: Optional[str] = None
     payment_table: Optional[str] = None
     field_doc_type: Optional[str] = None
+    import_from_date: Optional[str] = None
     offer_doc_types: Optional[str] = None
     order_doc_types: Optional[str] = None
 
@@ -2551,7 +2553,8 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
 
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
-    offers, doc_types = 0, {}
+    offers, doc_types, too_old = 0, {}, 0
+    from_date = _parse_goose_date(cfg.get("import_from_date"))
     details = []
 
     for rec in records:
@@ -2561,11 +2564,17 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
             # Offerte / preventivi: MAI registrati come ordini
             offers += 1
             continue
+        if from_date:
+            rec_date = _goose_record_date(rec, cfg.get("field_date") or "")
+            if rec_date and rec_date < from_date:
+                too_old += 1
+                continue
         oid = str(rec.get(cfg["field_order_id"]) or "").strip()
         piva = _norm_piva(rec.get(cfg["field_piva"]))
         try:
             if oid:
-                dup = await db.events.find_one({"goose_order_id": oid, "deleted_at": None})
+                # anche gli ordini eliminati: non vanno reimportati
+                dup = await db.events.find_one({"goose_order_id": oid})
                 if dup:
                     skipped += 1
                     continue
@@ -2655,6 +2664,7 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
         "imported": imported,
         "skipped_duplicates": skipped,
         "skipped_offers": offers,
+        "skipped_before_date": too_old,
         "doc_types": doc_types,
         "unmatched": unmatched,
         "errors": errors,
@@ -2755,6 +2765,17 @@ async def goose_set_mandante(body: GooseMandanteBody, user=Depends(require_admin
         upsert=True)
     n = await _apply_mandante_to_events(code, company, prev.get("goose_name"))
     return {"ok": True, "updated_orders": n}
+
+
+@api.delete("/goose/mandanti/{code}")
+async def goose_delete_mandante(code: str, user=Depends(require_admin)):
+    """Elimina il codice mandante e TUTTI gli ordini GooseApp collegati."""
+    code = code.strip()
+    q = {"source": "gooseapp", "type": "order", "deleted_at": None,
+         "$or": [{"goose_company_code": code}, {"company_name": code, "company_id": None}]}
+    res = await db.events.update_many(q, {"$set": {"deleted_at": now_utc(), "deleted_reason": "mandante_eliminato"}})
+    await db.goose_mandanti.delete_one({"code": code})
+    return {"ok": True, "deleted_orders": res.modified_count}
 
 
 @api.post("/goose/mandanti/auto")
