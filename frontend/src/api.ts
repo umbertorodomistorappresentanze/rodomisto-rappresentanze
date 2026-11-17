@@ -259,6 +259,9 @@ export type GooseSyncResult = {
   skipped_duplicates: number;
   skipped_offers?: number;
   skipped_before_date?: number;
+  skipped_not_sent?: number;
+  sent_unknown?: number;
+  sent_field?: string | null;
   doc_types?: Record<string, number>;
   unmatched: { order_id: string; partita_iva: string; reason: string }[];
   errors: { order_id: string; error: string }[];
@@ -286,6 +289,7 @@ export type GooseConfig = {
   offer_doc_types: string;
   order_doc_types: string;
   import_from_date: string;
+  field_sent: string;
   dest_table: string;
   mandanti_table: string;
 };

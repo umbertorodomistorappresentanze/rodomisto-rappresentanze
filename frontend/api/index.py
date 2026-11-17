@@ -1459,6 +1459,7 @@ async def client_history(client_id: str, user=Depends(get_current_user)):
     docs = await db.events.find(
         {"client_id": client_id, "deleted_at": None}, {"_id": 0}
     ).sort("created_at", -1).to_list(5000)
+    docs.sort(key=_doc_sort_key, reverse=True)
     return [event_public(d) for d in docs]
 
 
@@ -1672,6 +1673,7 @@ async def list_activities(
         q["agent"] = scope
     lim = max(1, min(limit, 2000))
     events = await db.events.find(q, {"_id": 0}).sort("created_at", -1).limit(lim).to_list(lim)
+    events.sort(key=_doc_sort_key, reverse=True)
 
     client_ids = list({e["client_id"] for e in events})
     clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0}).to_list(20000)
@@ -2279,6 +2281,7 @@ GOOSE_DEFAULT_CONFIG = {
     "payment_table": "",      # tabella modalità di pagamento (se il campo contiene un ID)
     "field_doc_type": "DTTIP",  # campo tipo documento (ordine / offerta)
     "import_from_date": "01/01/2025",  # ignora ordini con data documento precedente
+    "field_sent": "",         # campo "inviato/trasmesso" (vuoto = rilevamento automatico)
     "offer_doc_types": "",    # valori tipo documento da IGNORARE (offerte/preventivi), separati da virgola
     "order_doc_types": "",    # se compilato: importa SOLO questi tipi (ordini confermati)
 }
@@ -2299,6 +2302,7 @@ class GooseConfigBody(BaseModel):
     payment_table: Optional[str] = None
     field_doc_type: Optional[str] = None
     import_from_date: Optional[str] = None
+    field_sent: Optional[str] = None
     offer_doc_types: Optional[str] = None
     order_doc_types: Optional[str] = None
 
@@ -2447,6 +2451,48 @@ _NAME_KEYS = ("RAGSO", "RAGIONE", "DENOM", "NOME", "DESCR", "DES", "NOM", "RAG")
 _CITY_KEYS = ("LOCALITA", "CITTA", "COMUNE", "LOC", "CIT", "COM")
 
 
+_SENT_CANDIDATES = ("INVIATO", "DTINV", "FLINV", "FLAG_INVIO", "INVIO", "TRASMESSO", "DTTRA", "FLTRA", "SENT")
+_SENT_TRUE = {"1", "S", "SI", "SÌ", "Y", "YES", "TRUE", "T", "INVIATO", "TRASMESSO", "SENT", "-1"}
+
+
+def _goose_sent_field(rec: dict, cfg: dict) -> Optional[str]:
+    """Nome del campo 'inviato/trasmesso' presente nel record (configurato o rilevato)."""
+    keys = {str(k).upper(): k for k in (rec or {})}
+    f = (cfg.get("field_sent") or "").strip().upper()
+    if f:
+        return keys.get(f)
+    for c in _SENT_CANDIDATES:
+        if c in keys:
+            return keys[c]
+    return None
+
+
+def _goose_is_sent(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    t = str(value if value is not None else "").strip().upper()
+    if t in _SENT_TRUE:
+        return True
+    try:  # numerici diversi da 0 o date di invio valorizzate = inviato
+        return float(t.replace(",", ".")) != 0
+    except ValueError:
+        return bool(_parse_goose_date(t))
+
+
+def _doc_sort_key(e: dict):
+    """Storico: data documento decrescente e, a parità di data, numero
+    documento progressivo decrescente (poi ora di inserimento)."""
+    created = e.get("created_at")
+    if isinstance(created, datetime):
+        c = created if created.tzinfo else created.replace(tzinfo=timezone.utc)
+        day = c.astimezone(ROME).date().toordinal()
+        ts = c.timestamp()
+    else:
+        day, ts = 0, 0
+    num = re.sub(r"\D", "", str(e.get("order_number") or ""))
+    return (day, int(num) if num else -1, ts)
+
+
 def _goose_doc_type(rec: dict, cfg: dict) -> str:
     f = (cfg.get("field_doc_type") or "DTTIP").strip()
     for k, v in (rec or {}).items():
@@ -2554,6 +2600,7 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
     is_admin = actor.get("role") == "admin"
     imported, skipped, unmatched, errors = 0, 0, [], []
     offers, doc_types, too_old = 0, {}, 0
+    not_sent, sent_unknown, sent_fields = 0, 0, set()
     from_date = _parse_goose_date(cfg.get("import_from_date"))
     details = []
 
@@ -2564,6 +2611,15 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
             # Offerte / preventivi: MAI registrati come ordini
             offers += 1
             continue
+        sent_field = _goose_sent_field(rec, cfg)
+        if sent_field is None:
+            sent_unknown += 1
+        elif not _goose_is_sent(rec.get(sent_field)):
+            # Solo digitato/salvato in bozza su GooseApp: verrà importato dopo l'invio
+            not_sent += 1
+            continue
+        else:
+            sent_fields.add(str(sent_field))
         if from_date:
             rec_date = _goose_record_date(rec, cfg.get("field_date") or "")
             if rec_date and rec_date < from_date:
@@ -2665,6 +2721,9 @@ async def _process_goose_orders(records: list, cfg: dict, actor: dict) -> dict:
         "skipped_duplicates": skipped,
         "skipped_offers": offers,
         "skipped_before_date": too_old,
+        "skipped_not_sent": not_sent,
+        "sent_unknown": sent_unknown,
+        "sent_field": ", ".join(sorted(sent_fields)) or None,
         "doc_types": doc_types,
         "unmatched": unmatched,
         "errors": errors,

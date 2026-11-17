@@ -340,3 +340,4 @@ Agenda digitale semplice e veloce per le visite commerciali quotidiane di 2 agen
 - Healthcheck GET/HEAD / → {"status":"ok"} (UptimeRobot).
 - GooseApp: offerte/preventivi esclusi (field_doc_type default DTTIP; offer_doc_types / order_doc_types configurabili; euristica OF*/OFFERT/PREV/BOZZ/QUOT); risultato sync mostra offerte ignorate e tipi documento trovati; remove_goose_offers ad ogni avvio elimina offerte già importate (se goose_record presente).
 - GooseApp: cestino su ogni codice mandante (DELETE /api/goose/mandanti/{code}, elimina codice + ordini collegati); dedup su goose_order_id anche per ordini eliminati (non reimportati); import_from_date (default 01/01/2025) ignora ordini più vecchi (skipped_before_date).
+- GooseApp: importati solo ordini inviati/trasmessi (field_sent o auto INVIATO/DTINV/FLINV/TRASMESSO...; bozze saltate e importate dopo l'invio); storico e attività ordinati per data documento desc poi numero progressivo desc (_doc_sort_key).
