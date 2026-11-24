@@ -1672,8 +1672,12 @@ async def list_activities(
     elif scope in VALID_AGENTS:
         q["agent"] = scope
     lim = max(1, min(limit, 2000))
-    events = await db.events.find(q, {"_id": 0}).sort("created_at", -1).limit(lim).to_list(lim)
+    # Ordinamento come lo Storico attività (data documento desc, poi numero
+    # progressivo desc): si ordina l'intero insieme e SOLO dopo si applica il limite,
+    # così "limit=1" restituisce sempre la prima voce dello Storico.
+    events = await db.events.find(q, {"_id": 0}).to_list(20000)
     events.sort(key=_doc_sort_key, reverse=True)
+    events = events[:lim]
 
     client_ids = list({e["client_id"] for e in events})
     clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0}).to_list(20000)
